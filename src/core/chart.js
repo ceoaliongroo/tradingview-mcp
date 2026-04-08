@@ -1,7 +1,7 @@
 /**
  * Core chart control logic.
  */
-import { evaluate as _evaluate, evaluateAsync as _evaluateAsync, safeString, requireFinite } from '../connection.js';
+import { evaluate as _evaluate, evaluateAsync as _evaluateAsync, getClient as _getClient, safeString, requireFinite } from '../connection.js';
 import { waitForChartReady as _waitForChartReady } from '../wait.js';
 
 const CHART_API = 'window.TradingViewApi._activeChartWidgetWV.value()';
@@ -11,6 +11,8 @@ function _resolve(deps) {
     evaluate: deps?.evaluate || _evaluate,
     evaluateAsync: deps?.evaluateAsync || _evaluateAsync,
     waitForChartReady: deps?.waitForChartReady || _waitForChartReady,
+    getClient: deps?.getClient || _getClient,
+    sendAltR: deps?.sendAltR,
   };
 }
 
@@ -115,7 +117,8 @@ export async function manageIndicator({ action, indicator, entity_id, inputs: in
   }
 }
 
-export async function getVisibleRange() {
+export async function getVisibleRange({ _deps } = {}) {
+  const { evaluate } = _resolve(_deps);
   const result = await evaluate(`
     (function() {
       var chart = ${CHART_API};
@@ -157,7 +160,8 @@ export async function setVisibleRange({ from, to, _deps }) {
   return { success: true, requested: { from, to }, actual: actual || { from: 0, to: 0 } };
 }
 
-export async function scrollToDate({ date }) {
+export async function scrollToDate({ date, _deps }) {
+  const { evaluate, getClient, sendAltR } = _resolve(_deps);
   let timestamp;
   if (/^\d+$/.test(date)) timestamp = Number(date);
   else timestamp = Math.floor(new Date(date).getTime() / 1000);
@@ -171,11 +175,14 @@ export async function scrollToDate({ date }) {
   else if (res === 'M' || res === '1M') secsPerBar = 2592000;
   else { const mins = parseInt(res, 10); if (!isNaN(mins)) secsPerBar = mins * 60; }
 
-  const halfWindow = 25 * secsPerBar;
+  // On daily charts, keep roughly a full year visible while centering the requested date.
+  const halfWindow = (res === 'D' || res === '1D')
+    ? Math.floor((365 * secsPerBar) / 2)
+    : 25 * secsPerBar;
   const from = timestamp - halfWindow;
   const to = timestamp + halfWindow;
 
-  await evaluate(`
+  const zoomToYearRange = `
     (function() {
       var chart = ${CHART_API};
       var m = chart._chartWidget.model();
@@ -191,12 +198,71 @@ export async function scrollToDate({ date }) {
       }
       ts.zoomToBarsRange(fromIdx, toIdx);
     })()
-  `);
+  `;
+
+  await evaluate(zoomToYearRange);
   await new Promise(r => setTimeout(r, 500));
+
+  if (sendAltR) {
+    await sendAltR();
+  } else {
+    const client = await getClient();
+    await client.Input.dispatchKeyEvent({
+      type: 'keyDown',
+      key: 'r',
+      code: 'KeyR',
+      windowsVirtualKeyCode: 82,
+      modifiers: 1,
+    });
+    await client.Input.dispatchKeyEvent({
+      type: 'keyUp',
+      key: 'r',
+      code: 'KeyR',
+    });
+  }
+
+  // TradingView may reset the visible window when refreshing scale, so restore the year-long range.
+  await evaluate(zoomToYearRange);
+  if (res === 'D' || res === '1D') {
+    const spacingInfo = await evaluate(`
+      (function() {
+        var chart = ${CHART_API};
+        var ts = chart._chartWidget.model().timeScale();
+        var range = chart.getVisibleRange();
+        return {
+          barSpacing: ts.barSpacing(),
+          visible_from: range && range.from ? range.from : null,
+          visible_to: range && range.to ? range.to : null,
+        };
+      })()
+    `);
+
+    const visibleFrom = Number(spacingInfo?.visible_from);
+    const visibleTo = Number(spacingInfo?.visible_to);
+    const currentSpacing = Number(spacingInfo?.barSpacing);
+    const currentDays = Number.isFinite(visibleFrom) && Number.isFinite(visibleTo) && visibleTo > visibleFrom
+      ? (visibleTo - visibleFrom) / 86400
+      : null;
+
+    if (Number.isFinite(currentSpacing) && Number.isFinite(currentDays) && currentDays > 0) {
+      const desiredSpacing = currentSpacing * (currentDays / 365);
+      if (Number.isFinite(desiredSpacing) && desiredSpacing > 0 && Math.abs(desiredSpacing - currentSpacing) > 0.01) {
+        await evaluate(`
+          (function() {
+            var chart = ${CHART_API};
+            var ts = chart._chartWidget.model().timeScale();
+            ts.setBarSpacing(${desiredSpacing});
+          })()
+        `);
+      }
+    }
+  }
+  await new Promise(r => setTimeout(r, 300));
   return { success: true, date, centered_on: timestamp, resolution, window: { from, to } };
 }
 
-export async function symbolInfo() {
+export async function symbolInfo({ _deps } = {}) {
+  const { evaluate } = _resolve(_deps);
   const result = await evaluate(`
     (function() {
       var chart = ${CHART_API};

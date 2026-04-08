@@ -29,6 +29,7 @@ CDP or UI-based path already exists.
 - Avoid `pine_get_source` for large scripts unless you are actively editing them.
 - Call `chart_get_state` once at the beginning of a chart-analysis workflow.
 - Prefer screenshots over large data dumps when visual confirmation is enough.
+- On daily charts, when centering a specific date, keep at least a full year visible in the horizontal range. If a refresh/scale reset is needed, reapply the yearly range after the refresh so the date stays centered and the window does not get cropped.
 
 ## Project layout
 
@@ -41,4 +42,3 @@ CDP or UI-based path already exists.
 ## Legacy note
 
 `CLAUDE.md` is kept for backward compatibility only. Codex should use this file.
-
