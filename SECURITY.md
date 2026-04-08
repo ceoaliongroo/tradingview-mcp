@@ -2,15 +2,19 @@
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in this project, please report it responsibly.
+If you discover a security vulnerability in this project, please report it
+responsibly.
 
-**Email:** Open a private security advisory via [GitHub Security Advisories](https://github.com/tradesdontlie/tradingview-mcp/security/advisories/new).
+**Email:** Open a private security advisory via [GitHub Security
+Advisories](https://github.com/ceoaliongroo/tradingview-mcp/security/advisories/new).
 
-**Do not** open a public issue for security vulnerabilities.
+Do not open a public issue for security vulnerabilities.
 
 ## Scope
 
-This project connects to a locally running TradingView Desktop instance via Chrome DevTools Protocol on `localhost:9222`. Security concerns in scope include:
+This project connects to a locally running TradingView Desktop instance via
+Chrome DevTools Protocol on `localhost:9222`. Security concerns in scope
+include:
 
 - Code injection via crafted tool inputs
 - Unintended data exposure through tool outputs
@@ -19,9 +23,9 @@ This project connects to a locally running TradingView Desktop instance via Chro
 
 ## Out of Scope
 
-- TradingView's own security (report to TradingView directly)
-- Chrome DevTools Protocol security (report to Google/Chromium)
-- Claude Code or MCP SDK security (report to Anthropic)
+- TradingView's own security
+- Chrome DevTools Protocol security
+- Codex or MCP SDK security
 
 ## Best Practices for Users
 
@@ -29,3 +33,4 @@ This project connects to a locally running TradingView Desktop instance via Chro
 - Do not expose port 9222 to your network or the internet
 - Do not pipe `tv stream` output to external services without reviewing the data
 - Keep your TradingView Desktop and Node.js installations up to date
+

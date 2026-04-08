@@ -25,7 +25,7 @@ function printHelp() {
   }
   console.log('\nRun "tv <command> --help" for command-specific options.');
   console.log('\nDISCLAIMER');
-  console.log('  Not affiliated with TradingView Inc. or Anthropic, PBC.');
+  console.log('  Not affiliated with TradingView Inc. or any AI provider.');
   console.log('  Use subject to TradingView\'s Terms of Use: tradingview.com/policies');
 }
 

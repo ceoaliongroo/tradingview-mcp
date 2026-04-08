@@ -75,7 +75,7 @@ export async function step({ _deps } = {}) {
 }
 
 export async function autoplay({ speed, _deps } = {}) {
-  // Validate BEFORE any CDP calls — invalid values corrupt cloud account state permanently
+  // Validate BEFORE any CDP calls — invalid values can corrupt persisted TradingView replay state
   if (speed > 0 && !VALID_AUTOPLAY_DELAYS.includes(speed))
     throw new Error(`Invalid autoplay delay ${speed}ms. Valid values: ${VALID_AUTOPLAY_DELAYS.join(', ')}`);
 

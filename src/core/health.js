@@ -170,6 +170,7 @@ export async function launch({ port, kill_existing } = {}) {
       `${process.env.HOME}/Applications/TradingView.app/Contents/MacOS/TradingView`,
     ],
     win32: [
+      'C:\\Program Files\\WindowsApps\\31178TradingViewInc.TradingView_3.0.0.0_x64__q4jpyh43s5mv6\\TradingView.exe',
       `${process.env.LOCALAPPDATA}\\TradingView\\TradingView.exe`,
       `${process.env.PROGRAMFILES}\\TradingView\\TradingView.exe`,
       `${process.env['PROGRAMFILES(X86)']}\\TradingView\\TradingView.exe`,
@@ -194,6 +195,20 @@ export async function launch({ port, kill_existing } = {}) {
       const cmd = platform === 'win32' ? 'where TradingView.exe' : 'which tradingview';
       tvPath = execSync(cmd, { timeout: 3000 }).toString().trim().split('\n')[0];
       if (tvPath && !existsSync(tvPath)) tvPath = null;
+    } catch { /* ignore */ }
+  }
+
+  if (!tvPath && platform === 'win32') {
+    try {
+      const ps = [
+        '$pkg = Get-AppxPackage *TradingView* | Select-Object -First 1',
+        'if ($pkg -and $pkg.InstallLocation) {',
+        '  $exe = Join-Path $pkg.InstallLocation "TradingView.exe"',
+        '  if (Test-Path $exe) { Write-Output $exe }',
+        '}',
+      ].join('; ');
+      const found = execSync(`powershell -NoProfile -Command "${ps.replace(/"/g, '\\"')}"`, { timeout: 5000 }).toString().trim();
+      if (found && existsSync(found)) tvPath = found;
     } catch { /* ignore */ }
   }
 

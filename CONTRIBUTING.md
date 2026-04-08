@@ -4,41 +4,46 @@ Thanks for your interest in contributing to tradingview-mcp.
 
 ## Scope
 
-This tool is a **local bridge** between Claude Code and the TradingView Desktop app running on your machine. All contributions must stay within this scope.
+This tool is a local bridge between Codex and the TradingView Desktop app
+running on your machine. Contributions should stay within that boundary.
 
-### What's in scope
+### What is in scope
 
-- Improving reliability of existing tools (better selectors, error handling, timeouts)
+- Improving reliability of existing tools
+- Better selectors, error handling, and timeouts
 - Adding CLI commands that mirror existing MCP tool capabilities
 - Bug fixes and test coverage
 - Documentation improvements
-- Pine Script development workflow enhancements
-- UI automation for the locally running Desktop app
+- Pine Script workflow enhancements
+- UI automation for the locally running TradingView Desktop app
 
-### What's out of scope
+### What is out of scope
 
-Contributions **must not** add features that:
+Contributions must not add features that:
 
-- **Connect directly to TradingView's servers** — all data access must go through the locally running Desktop app via CDP
-- **Bypass authentication or subscription restrictions** — this tool requires a valid TradingView account and subscription
-- **Scrape, cache, or redistribute market data** — no data storage, no databases, no export-to-CSV of price data
-- **Enable automated trading or order execution** — this is a chart reading/development tool, not a trading bot framework
-- **Reverse-engineer or redistribute TradingView's proprietary code** — no bundled TradingView source, no charting library code
-- **Access other users' data** — private scripts, watchlists, or account information of others
+- Connect directly to TradingView servers
+- Bypass authentication or subscription restrictions
+- Scrape, cache, or redistribute market data
+- Enable automated trading or order execution
+- Reverse-engineer or redistribute TradingView's proprietary code
+- Access other users' private data
 
-If you're unsure whether a feature fits, open an issue to discuss before submitting a PR.
+If you are unsure whether a feature fits, open an issue before submitting a PR.
 
 ## Development
 
 ```bash
 npm install
-npm test          # 29 offline tests (no TradingView needed)
-tv status         # verify CDP connection (TradingView must be running)
+npm test:unit
+tv status
 ```
+
+`tv status` requires TradingView Desktop to be running with CDP enabled.
 
 ## Pull Requests
 
-- Keep changes focused — one feature or fix per PR
-- Add tests for new functionality where possible
-- Ensure `npm test` passes (29/29)
+- Keep changes focused
+- Add tests for new functionality when possible
+- Make sure the relevant test command passes
 - Test against a live TradingView Desktop instance before submitting
+
