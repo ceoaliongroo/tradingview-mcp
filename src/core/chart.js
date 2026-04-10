@@ -6,6 +6,30 @@ import { waitForChartReady as _waitForChartReady } from '../wait.js';
 
 const CHART_API = 'window.TradingViewApi._activeChartWidgetWV.value()';
 
+function normalizeResolutionLabel(resolution) {
+  const res = String(resolution || '');
+  if (res === '5M') return '5m';
+  if (res === '30M') return '30m';
+  if (res === '5') return '5m';
+  if (res === '30') return '30m';
+  if (res === '120') return '2h';
+  if (res === '480') return '8h';
+  return res;
+}
+
+export function normalizeTimeframeInput(timeframe) {
+  const tf = String(timeframe || '').trim();
+  const lower = tf.toLowerCase();
+  if (lower === '5m') return '5';
+  if (lower === '30m') return '30';
+  if (lower === '2h') return '120';
+  if (lower === '8h') return '480';
+  if (lower === '1d' || lower === 'd') return 'D';
+  if (lower === '1w' || lower === 'w') return 'W';
+  if (lower === '1m' || lower === 'm') return 'M';
+  return tf;
+}
+
 function _resolve(deps) {
   return {
     evaluate: deps?.evaluate || _evaluate,
@@ -36,7 +60,7 @@ export async function getState({ _deps } = {}) {
       };
     })()
   `);
-  return { success: true, ...state };
+  return { success: true, ...state, resolution: normalizeResolutionLabel(state?.resolution) };
 }
 
 export async function setSymbol({ symbol, _deps }) {
@@ -56,10 +80,11 @@ export async function setSymbol({ symbol, _deps }) {
 
 export async function setTimeframe({ timeframe, _deps }) {
   const { evaluate, waitForChartReady } = _resolve(_deps);
+  const tvTimeframe = normalizeTimeframeInput(timeframe);
   await evaluate(`
     (function() {
       var chart = ${CHART_API};
-      chart.setResolution(${safeString(timeframe)}, {});
+      chart.setResolution(${safeString(tvTimeframe)}, {});
     })()
   `);
   const ready = await waitForChartReady(null, timeframe);

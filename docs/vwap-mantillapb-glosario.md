@@ -23,6 +23,18 @@ Read it before changing the Pine for this indicator.
 | Quarterly mode | Resets every quarter, displayed on `8H` chart |
 | Monthly mode | Resets every month, displayed on `2H` chart |
 | Weekly mode | Resets every week, displayed on `30m` chart |
+| Session mode | Resets on the session anchor, displayed on `5m` chart. In our vocabulary, this is the `daily-period` view |
+
+## Auto timeframe rule
+
+- Daily charts map to `Year` and use `yearColor` (`#A2A3A8`).
+- `8h` charts map to `Quarter` and use `quarterColor` (`#FFA500`).
+- `2h` charts map to `Month` and use `monthColor` (`#00FFFF`).
+- `30m` charts map to `Week` and use `weekColor` (`#FC4AAC`).
+- `5m` charts map to `Session` and use `sessionColor` (`#FFFF00`).
+- The Pine source resolves this with timeframe flags, not raw strings, so `D` and `1D` behave the same.
+- In the current indicator, `Session` is the internal label used for the `5m` timeframe that represents the daily-period view.
+- Our documentation and commands use lowercase `m` for intraday timeframes (`5m`, `30m`, `2h`, `8h`), even if TradingView reports the internal resolution as uppercase (`5M`, `30M`, etc.).
 
 ## Naming convention
 
@@ -124,4 +136,3 @@ Use this palette when implementing the first version of the new logic if you wan
 2. Translate the request into the working names here.
 3. Map the working names to the Pine variables.
 4. Keep this file updated whenever the terminology changes.
-

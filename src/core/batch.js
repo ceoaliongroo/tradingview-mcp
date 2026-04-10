@@ -6,6 +6,7 @@ import { waitForChartReady } from '../wait.js';
 import { writeFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { normalizeTimeframeInput } from './chart.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SCREENSHOT_DIR = join(dirname(dirname(__dirname)), 'screenshots');
@@ -27,8 +28,9 @@ export async function batchRun({ symbols, timeframes, action, delay_ms, ohlcv_co
         else if (apiPath) await evaluate(`${apiPath}.setSymbol(${safeString(symbol)})`);
 
         if (tf) {
-          if (colPath) await evaluate(`${colPath}.setResolution(${safeString(tf)})`);
-          else if (apiPath) await evaluate(`${apiPath}.setResolution(${safeString(tf)})`);
+          const tvTf = normalizeTimeframeInput(tf);
+          if (colPath) await evaluate(`${colPath}.setResolution(${safeString(tvTf)})`);
+          else if (apiPath) await evaluate(`${apiPath}.setResolution(${safeString(tvTf)})`);
         }
 
         await waitForChartReady(symbol);

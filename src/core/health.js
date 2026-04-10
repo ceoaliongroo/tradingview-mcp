@@ -5,6 +5,17 @@ import { getClient, getTargetInfo, evaluate } from '../connection.js';
 import { existsSync } from 'fs';
 import { execSync, spawn } from 'child_process';
 
+function normalizeResolutionLabel(resolution) {
+  const res = String(resolution || '');
+  if (res === '5M') return '5m';
+  if (res === '30M') return '30m';
+  if (res === '5') return '5m';
+  if (res === '30') return '30m';
+  if (res === '120') return '2h';
+  if (res === '480') return '8h';
+  return res;
+}
+
 export async function healthCheck() {
   await getClient();
   const target = await getTargetInfo();
@@ -36,7 +47,7 @@ export async function healthCheck() {
     target_url: target.url,
     target_title: target.title,
     chart_symbol: state?.symbol || 'unknown',
-    chart_resolution: state?.resolution || 'unknown',
+    chart_resolution: normalizeResolutionLabel(state?.resolution || 'unknown'),
     chart_type: state?.chartType ?? null,
     api_available: state?.apiAvailable ?? false,
   };

@@ -1,7 +1,7 @@
 // This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
 // ? Jesus_Salvatierra
-//@version=5
-indicator(title="Vwap MantillaPB", shorttitle="Vwap.mantillapb", overlay=true)
+//@version=6
+indicator(title="Vwap MantillaPB", shorttitle="Vwap.MPB", overlay=true)
 
     
 computeVWAP(isNewPeriod) =>
@@ -29,13 +29,16 @@ computeVWAP(isNewPeriod) =>
 anchorInput = input.string(defval = "Session", title="Anchor Period",
  options=["Session", "Week", "Month", "Quarter", "Year", "Decade", "Half Decade"], group="VWAP Settings")
 autoAnchorByTF = input.bool(true, title="Anchor timeframe", group="VWAP Settings")
-anchorFromTF = switch timeframe.period
-	"5" => "Session"
-	"30" => "Week"
-	"120" => "Month"
-	"480" => "Quarter"
-	"D" => "Year"
-	=> anchorInput
+anchorFromTF = anchorInput
+if timeframe.isdaily
+	anchorFromTF := "Year"
+else if timeframe.isminutes
+	anchorFromTF := switch timeframe.multiplier
+		5 => "Session"
+		30 => "Week"
+		120 => "Month"
+		480 => "Quarter"
+		=> anchorInput
 anchor = autoAnchorByTF ? anchorFromTF : anchorInput
 styleGroup = "Colors"
 sessionColor = input.color(color.yellow, title="Color Session", group=styleGroup)
@@ -45,7 +48,7 @@ quarterColor = input.color(color.orange, title="Color Quarter", group=styleGroup
 yearColor = input.color(color.rgb(162, 163, 168), title="Color Year", group=styleGroup)
 vwapBaseColor = input.color(color.red, title="Color VWAP", group=styleGroup)
  
-hideonDWM = input(false, title="Hide VWAP on 1D or Above", group="VWAP Settings")
+hideonDWM = input.bool(false, title="Hide VWAP on 1D or Above", group="VWAP Settings")
 showBands = input(true, title="Calculate Bands", group="Standard Deviation Bands Settings")
 showPrevious= input.bool(true, title= "Show Previous ZONES")
 stdevMult = input.float(1.0, title="DVA", group="Standard Deviation Bands Settings", step= 0.1)
@@ -76,6 +79,8 @@ periodColor = switch anchor
 	"Month" => monthColor
 	"Quarter" => quarterColor
 	"Year" => yearColor
+	"Half Decade" => yearColor
+	"Decade" => yearColor
 	=> color.gray
 float vwapValue = na
 float std = na
@@ -150,6 +155,4 @@ fill(upperBand, lowerBand, title="Bands Fill", color= showBands ? fillColor : na
 fill(upper3, upper2, title="Bands Fill", color= showBands ? fillColor : na)
 fill(lower3, lower2, title="Bands Fill", color= showBands ? fillColor : na)
  
-
-
 
