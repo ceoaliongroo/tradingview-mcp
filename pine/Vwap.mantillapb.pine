@@ -51,6 +51,9 @@ vwapBaseColor = input.color(color.red, title="Color VWAP", group=styleGroup)
 hideonDWM = input.bool(false, title="Hide VWAP on 1D or Above", group="VWAP Settings")
 showBands = input(true, title="Calculate Bands", group="Standard Deviation Bands Settings")
 showPrevious= input.bool(true, title= "Show Previous ZONES")
+showPrevious05 = input.bool(true, title="Show Previous 0.5 Lines", group="VWAP Settings")
+showPrevious15 = input.bool(true, title="Show Previous 1.5 Lines", group="VWAP Settings")
+showCurrent15 = input.bool(true, title="Show Current 1.5 Lines", group="Standard Deviation Bands Settings")
 stdevMult = input.float(1.0, title="DVA", group="Standard Deviation Bands Settings", step= 0.1)
 stdevMult2 = input.float(2.0, title="DVA+2", group="Standard Deviation Bands Settings", step= 0.1)
 stdevMult3 = input.float(3.0, title="DVA+3", group="Standard Deviation Bands Settings", step= 0.1)
@@ -115,6 +118,8 @@ if not timeframe.isdwm or timeframe.isdwm
 pdvavwap = ta.valuewhen(isNewPeriod, vwapValue[1],0)
 pdvah = ta.valuewhen(isNewPeriod, upperBandValue[1],0)
 pdval = ta.valuewhen(isNewPeriod, lowerBandValue[1],0)
+pdvah2 = ta.valuewhen(isNewPeriod, upperBandValue2[1],0)
+pdval2 = ta.valuewhen(isNewPeriod, lowerBandValue2[1],0)
 periodStart = ta.valuewhen(isNewPeriod, bar_index, 0)
 
 prevdvah= showPrevious and not na(periodStart) ? line.new(periodStart, pdvah, periodStart + 1, pdvah, extend=extend.right, width=1, color=color.new(periodColor, 0)) : na
@@ -122,18 +127,30 @@ line.delete(prevdvah[1])
 prevdval= showPrevious and not na(periodStart) ? line.new(periodStart, pdval, periodStart + 1, pdval, extend=extend.right, width=1, color=color.new(periodColor, 0)) : na
 line.delete(prevdval[1])
 
-line.set_style(prevdvah, line.style_dotted)
-line.set_style(prevdval, line.style_dotted)
+if not na(prevdvah)
+	line.set_style(prevdvah, line.style_solid)
+if not na(prevdval)
+	line.set_style(prevdval, line.style_solid)
 prevFill = showPrevious and not na(prevdvah) and not na(prevdval) ? linefill.new(prevdvah, prevdval, color.new(periodColor, 90)) : na
 linefill.delete(prevFill[1])
 
-prevup05 = showPrevious and not na(periodStart) and not na(pdvavwap) and not na(pdvah) ? line.new(periodStart, (pdvavwap + pdvah) * 0.5, periodStart + 1, (pdvavwap + pdvah) * 0.5, extend=extend.right, width=1, color=color.new(periodColor, 0)) : na
+prevup05 = showPrevious and showPrevious05 and not na(periodStart) and not na(pdvavwap) and not na(pdvah) ? line.new(periodStart, (pdvavwap + pdvah) * 0.5, periodStart + 1, (pdvavwap + pdvah) * 0.5, extend=extend.right, width=1, color=color.new(periodColor, 0)) : na
 line.delete(prevup05[1])
-prevdn05 = showPrevious and not na(periodStart) and not na(pdvavwap) and not na(pdval) ? line.new(periodStart, (pdvavwap + pdval) * 0.5, periodStart + 1, (pdvavwap + pdval) * 0.5, extend=extend.right, width=1, color=color.new(periodColor, 0)) : na
+prevdn05 = showPrevious and showPrevious05 and not na(periodStart) and not na(pdvavwap) and not na(pdval) ? line.new(periodStart, (pdvavwap + pdval) * 0.5, periodStart + 1, (pdvavwap + pdval) * 0.5, extend=extend.right, width=1, color=color.new(periodColor, 0)) : na
 line.delete(prevdn05[1])
+prevup15 = showPrevious and showPrevious15 and not na(periodStart) and not na(pdvah) and not na(pdvah2) ? line.new(periodStart, (pdvah + pdvah2) * 0.5, periodStart + 1, (pdvah + pdvah2) * 0.5, extend=extend.right, width=1, color=color.new(periodColor, 0)) : na
+line.delete(prevup15[1])
+prevdn15 = showPrevious and showPrevious15 and not na(periodStart) and not na(pdval) and not na(pdval2) ? line.new(periodStart, (pdval + pdval2) * 0.5, periodStart + 1, (pdval + pdval2) * 0.5, extend=extend.right, width=1, color=color.new(periodColor, 0)) : na
+line.delete(prevdn15[1])
 
-line.set_style(prevup05, line.style_dotted)
-line.set_style(prevdn05, line.style_dotted)
+if not na(prevup05)
+	line.set_style(prevup05, line.style_dotted)
+if not na(prevdn05)
+	line.set_style(prevdn05, line.style_dotted)
+if not na(prevup15)
+	line.set_style(prevup15, line.style_dotted)
+if not na(prevdn15)
+	line.set_style(prevdn15, line.style_dotted)
 vwapLineColor = close > vwapValue ? color.new(vwapBaseColor, 0) : color.new(vwapBaseColor, 0)
 bandsColor = color.new(periodColor, 80)
 fillColor = color.new(periodColor, 80)
@@ -148,8 +165,8 @@ upper3 = plot(upperBandValue3, title="DVA+3",  color=bandsColor, display=plotDis
 lower3 = plot(lowerBandValue3, title="DVA-3",  color=bandsColor, display=plotDisplay)
 mu05 = plot(((vwapValue+upperBandValue)/2), title= "middle up 0.5", color= color.new(periodColor, 50), style = plot.style_linebr, display=plotDisplay)
 ml05 = plot(((vwapValue+lowerBandValue)/2), title= "middle down 0.5",color= color.new(periodColor, 50), style = plot.style_linebr, display=plotDisplay)
-mup2 = plot(((upperBandValue+upperBandValue2)/2), title= "Middle up 1.5",color= color.new(periodColor, 100), style = plot.style_linebr, display=plotDisplay)
-mudn2 = plot(((lowerBandValue+lowerBandValue2)/2), title= "Middle down 1.5", color= color.new(periodColor, 100), style = plot.style_linebr, display=plotDisplay)
+mup2 = plot(showCurrent15 ? ((upperBandValue+upperBandValue2)/2) : na, title= "Middle up 1.5",color= color.new(periodColor, 50), style = plot.style_linebr, display=plotDisplay)
+mudn2 = plot(showCurrent15 ? ((lowerBandValue+lowerBandValue2)/2) : na, title= "Middle down 1.5", color= color.new(periodColor, 50), style = plot.style_linebr, display=plotDisplay)
 
 fill(upperBand, lowerBand, title="Bands Fill", color= showBands ? fillColor : na)
 fill(upper3, upper2, title="Bands Fill", color= showBands ? fillColor : na)
