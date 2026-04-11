@@ -102,6 +102,15 @@ export async function discover() {
 export async function uiState() {
   const state = await evaluate(`
     (function() {
+      function isVisible(el) {
+        return !!(el && el.offsetParent !== null && el.offsetWidth > 0 && el.offsetHeight > 0);
+      }
+      function norm(value) {
+        return String(value || '').replace(/\\s+/g, ' ').trim().toLowerCase();
+      }
+      function textOf(el) {
+        return ((el && (el.textContent || el.innerText || '')) || '').trim();
+      }
       var ui = {};
       var bottom = document.querySelector('[class*="layout__area--bottom"]');
       ui.bottom_panel = { open: !!(bottom && bottom.offsetHeight > 50), height: bottom ? bottom.offsetHeight : 0 };
@@ -163,6 +172,25 @@ export async function uiState() {
         function unwrap(v) { return (v && typeof v === 'object' && typeof v.value === 'function') ? v.value() : v; }
         ui.replay = { available: unwrap(replay.isReplayAvailable()), started: unwrap(replay.isReplayStarted()) };
       } catch(e) { ui.replay = { error: e.message }; }
+      try {
+        var bodyText = norm(document.body && (document.body.innerText || document.body.textContent) || '');
+        var sessionDetected = /session disconnected|multiple connections|connected elsewhere|another session/i.test(bodyText);
+        var connectButtons = [];
+        var candidates = Array.prototype.slice.call(document.querySelectorAll('button, [role="button"], a')).filter(isVisible);
+        for (var i = 0; i < candidates.length; i++) {
+          var btn = candidates[i];
+          var txt = norm(textOf(btn));
+          var aria = norm(btn.getAttribute('aria-label'));
+          if (/connect|reconnect/.test(txt) || /connect|reconnect/.test(aria)) {
+            connectButtons.push({
+              text: textOf(btn).substring(0, 80),
+              aria_label: btn.getAttribute('aria-label') || null,
+              data_name: btn.getAttribute('data-name') || null,
+            });
+          }
+        }
+        ui.session = { disconnected: sessionDetected, connect_buttons: connectButtons.slice(0, 10) };
+      } catch(e) { ui.session = { error: e.message }; }
       return ui;
     })()
   `);

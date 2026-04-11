@@ -3,6 +3,16 @@
  */
 import { evaluate, evaluateAsync, getClient } from '../connection.js';
 
+function _visibleButtonList(root) {
+  return Array.prototype.slice.call(root.querySelectorAll('button, [role="button"], a')).filter(function(el) {
+    return !!(el && el.offsetParent !== null && el.offsetWidth > 0 && el.offsetHeight > 0);
+  });
+}
+
+function _normalizeText(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
 export async function click({ by, value }) {
   const escaped = JSON.stringify(value);
   const result = await evaluate(`
@@ -86,6 +96,86 @@ export async function openPanel({ panel, action }) {
     if (result && result.error) throw new Error(result.error);
     return { success: true, panel, action, was_open: result?.was_open ?? false, performed: result?.performed ?? 'unknown' };
   }
+}
+
+export async function reconnectSession() {
+  const result = await evaluate(`
+    (function() {
+      function textOf(el) {
+        return ((el && (el.textContent || el.innerText || '')) || '').trim();
+      }
+      function describe(el) {
+        if (!el) return null;
+        var rect = el.getBoundingClientRect();
+        return {
+          text: textOf(el).substring(0, 80),
+          aria_label: el.getAttribute('aria-label') || null,
+          data_name: el.getAttribute('data-name') || null,
+          x: Math.round(rect.x),
+          y: Math.round(rect.y),
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+        };
+      }
+      function visibleButtons(root) {
+        return Array.prototype.slice.call(root.querySelectorAll('button, [role="button"], a')).filter(function(el) {
+          return !!(el && el.offsetParent !== null && el.offsetWidth > 0 && el.offsetHeight > 0);
+        });
+      }
+      function norm(value) {
+        return String(value || '').replace(/\\s+/g, ' ').trim().toLowerCase();
+      }
+
+      var bodyText = norm(document.body && (document.body.innerText || document.body.textContent) || '');
+      var sessionDetected = /session disconnected|multiple connections|connected elsewhere|another session/i.test(bodyText);
+      var dialogRoots = Array.prototype.slice.call(document.querySelectorAll('[role="dialog"], [aria-modal="true"], .modal, .dialog, .tv-dialog, .js-dialog, .tv-dialog-window'));
+      var roots = dialogRoots.filter(function(el) { return !!(el && el.offsetParent !== null); });
+      if (!roots.length) roots = [document];
+
+      var candidates = [];
+      for (var r = 0; r < roots.length; r++) {
+        var buttons = visibleButtons(roots[r]);
+        for (var i = 0; i < buttons.length; i++) {
+          var btn = buttons[i];
+          var txt = norm(textOf(btn));
+          var aria = norm(btn.getAttribute('aria-label'));
+          if (/connect|reconnect/.test(txt) || /connect|reconnect/.test(aria)) candidates.push(btn);
+        }
+      }
+
+      var exact = null;
+      for (var j = 0; j < candidates.length; j++) {
+        var candidateText = norm(textOf(candidates[j]));
+        if (candidateText === 'connect' || candidateText === 'reconnect') {
+          exact = candidates[j];
+          break;
+        }
+      }
+
+      var button = exact || candidates[0] || null;
+      var clicked = false;
+      if (sessionDetected && button) {
+        button.click();
+        clicked = true;
+      }
+
+      return {
+        session_detected: sessionDetected,
+        button_found: !!button,
+        clicked: clicked,
+        button: describe(button),
+        body_text_sample: bodyText.substring(0, 500),
+      };
+    })()
+  `);
+  return {
+    success: true,
+    session_detected: !!result?.session_detected,
+    button_found: !!result?.button_found,
+    clicked: !!result?.clicked,
+    button: result?.button || null,
+    body_text_sample: result?.body_text_sample || null,
+  };
 }
 
 export async function fullscreen() {

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { jsonResult } from './_format.js';
 import * as core from '../core/health.js';
+import { reconnectSession } from '../core/ui.js';
 
 export function registerHealthTools(server) {
   server.tool('tv_health_check', 'Check CDP connection to TradingView and return current chart state', {}, async () => {
@@ -15,6 +16,11 @@ export function registerHealthTools(server) {
 
   server.tool('tv_ui_state', 'Get current UI state: which panels are open, what buttons are visible/enabled/disabled', {}, async () => {
     try { return jsonResult(await core.uiState()); }
+    catch (err) { return jsonResult({ success: false, error: err.message }, true); }
+  });
+
+  server.tool('tv_reconnect_session', 'Detect a Session Disconnected popup and click Connect/Reconnect to restore the current TradingView session', {}, async () => {
+    try { return jsonResult(await reconnectSession()); }
     catch (err) { return jsonResult({ success: false, error: err.message }, true); }
   });
 
