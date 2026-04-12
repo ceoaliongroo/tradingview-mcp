@@ -84,5 +84,12 @@ register('data', {
         return core.getIndicator({ entity_id: positionals[0] });
       },
     }],
+    ['snapshot', {
+      description: 'Get a full indicator snapshot with normalized input names, current values, style values, and graphics counts',
+      handler: (opts, positionals) => {
+        if (!positionals[0]) throw new Error('Entity ID required. Usage: tv data snapshot eFu1Ot');
+        return core.getIndicatorSnapshot({ entity_id: positionals[0] });
+      },
+    }],
   ]),
 });

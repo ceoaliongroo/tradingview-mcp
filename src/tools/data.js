@@ -18,6 +18,20 @@ export function registerDataTools(server) {
     catch (err) { return jsonResult({ success: false, error: err.message }, true); }
   });
 
+  server.tool('data_get_indicator_snapshot', 'Get a full indicator snapshot with normalized input names, current values, style values, and graphics counts', {
+    entity_id: z.string().describe('Study entity ID (from chart_get_state)'),
+  }, async ({ entity_id }) => {
+    try { return jsonResult(await core.getIndicatorSnapshot({ entity_id })); }
+    catch (err) { return jsonResult({ success: false, error: err.message }, true); }
+  });
+
+  server.tool('data_get_demark_snapshot', 'Get a resolved DeMARK 9-13 snapshot with count type, direction, position, confidence, current bar, and risk hints', {
+    entity_id: z.string().describe('Study entity ID (from chart_get_state)'),
+  }, async ({ entity_id }) => {
+    try { return jsonResult(await core.getDemarkSnapshot({ entity_id })); }
+    catch (err) { return jsonResult({ success: false, error: err.message }, true); }
+  });
+
   server.tool('data_get_strategy_results', 'Get strategy performance metrics from Strategy Tester', {}, async () => {
     try { return jsonResult(await core.getStrategyResults()); }
     catch (err) { return jsonResult({ success: false, error: err.message }, true); }

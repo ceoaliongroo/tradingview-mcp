@@ -22,7 +22,7 @@ const server = new McpServer(
     description: 'AI-assisted TradingView chart analysis and Pine Script development via Chrome DevTools Protocol',
   },
   {
-    instructions: `TradingView MCP — 78 tools for reading and controlling a live TradingView Desktop chart.
+    instructions: `TradingView MCP — 79 tools for reading and controlling a live TradingView Desktop chart.
 
 TOOL SELECTION GUIDE — use this to pick the right tool:
 
@@ -31,12 +31,14 @@ Reading your chart:
 - data_get_study_values → get current numeric values from ALL visible indicators (RSI, MACD, BB, EMA, etc.)
 - quote_get → get real-time price snapshot (last, OHLC, volume)
 - data_get_ohlcv → get price bars. ALWAYS pass summary=true unless you need individual bars
+- data_get_indicator_snapshot → get a full study snapshot for one indicator (normalized input names, current values, style values, graphics counts)
 
 Reading custom Pine indicator output (line.new/label.new/table.new/box.new drawings):
 - data_get_pine_lines → horizontal price levels from custom indicators (deduplicated, sorted)
 - data_get_pine_labels → text annotations with prices ("PDH 24550", "Bias Long", etc.)
 - data_get_pine_tables → table data as formatted rows (session stats, analytics dashboards)
 - data_get_pine_boxes → price zones as {high, low} pairs
+- data_get_demark_snapshot → resolved DeMARK 9-13 snapshot with count types, directions, positions, current bar, and risk hints
 - ALWAYS pass study_filter to target a specific indicator by name (e.g., study_filter="Profiler")
 - Indicators must be VISIBLE on chart for these to work
 

@@ -5,8 +5,602 @@ import { evaluate, evaluateAsync, KNOWN_PATHS, safeString } from '../connection.
 
 const MAX_OHLCV_BARS = 500;
 const MAX_TRADES = 20;
+const MAX_INPUT_PREVIEW = 240;
 const CHART_API = KNOWN_PATHS.chartApi;
 const BARS_PATH = KNOWN_PATHS.mainSeriesBars;
+const DEMARK_LABEL_LIMIT = 120;
+
+const DEMARK_COLOR_REFERENCES = {
+  setup: {
+    dark: { r: 56, g: 142, b: 60 },
+    light: { r: 165, g: 214, b: 167 },
+  },
+  sequential: {
+    dark: { r: 178, g: 40, b: 51 },
+    light: { r: 250, g: 161, b: 164 },
+  },
+  combo: {
+    dark: { r: 0, g: 151, b: 167 },
+    light: { r: 128, g: 222, b: 234 },
+  },
+  tdst: {
+    dark: { r: 245, g: 124, b: 0 },
+    light: { r: 255, g: 204, b: 128 },
+  },
+};
+
+function previewLargeString(value, limit = MAX_INPUT_PREVIEW) {
+  if (typeof value !== 'string' || value.length <= limit) return value;
+  return {
+    preview: value.slice(0, limit),
+    length: value.length,
+    truncated: true,
+  };
+}
+
+function clamp01(value) {
+  return Math.max(0, Math.min(1, value));
+}
+
+function argbToRgb(argb) {
+  if (typeof argb !== 'number' || !Number.isFinite(argb)) return null;
+  const unsigned = argb >>> 0;
+  return {
+    a: (unsigned >>> 24) & 255,
+    r: (unsigned >>> 16) & 255,
+    g: (unsigned >>> 8) & 255,
+    b: unsigned & 255,
+    hex: `#${[(unsigned >>> 16) & 255, (unsigned >>> 8) & 255, unsigned & 255].map(v => v.toString(16).padStart(2, '0')).join('').toUpperCase()}`,
+  };
+}
+
+function rgbDistance(a, b) {
+  if (!a || !b) return Number.POSITIVE_INFINITY;
+  const dr = a.r - b.r;
+  const dg = a.g - b.g;
+  const db = a.b - b.b;
+  return Math.sqrt((dr * dr) + (dg * dg) + (db * db));
+}
+
+export function classifyDemarkColor(argb) {
+  const rgb = argbToRgb(argb);
+  if (!rgb) {
+    return {
+      argb: argb ?? null,
+      rgb: null,
+      family: 'unknown',
+      shade: 'unknown',
+      direction: null,
+      confidence: 0,
+      matched_reference: null,
+    };
+  }
+
+  let best = null;
+  for (const [family, shades] of Object.entries(DEMARK_COLOR_REFERENCES)) {
+    for (const [shade, ref] of Object.entries(shades)) {
+      const distance = rgbDistance(rgb, ref);
+      const score = 1 - clamp01(distance / 200);
+      if (!best || distance < best.distance) {
+        best = { family, shade, ref, distance, score };
+      }
+    }
+  }
+
+  const confidence = best ? clamp01(best.score) : 0;
+  return {
+    argb: argb ?? null,
+    rgb,
+    family: best?.family || 'unknown',
+    shade: best?.shade || 'unknown',
+    direction: best?.shade === 'dark' ? 'buy' : best?.shade === 'light' ? 'sell' : null,
+    confidence,
+    matched_reference: best
+      ? {
+          family: best.family,
+          shade: best.shade,
+          rgb: best.ref,
+          hex: `#${[best.ref.r, best.ref.g, best.ref.b].map(v => v.toString(16).padStart(2, '0')).join('').toUpperCase()}`,
+          distance: Math.round(best.distance * 100) / 100,
+        }
+      : null,
+  };
+}
+
+export function normalizeDemarkText(rawText) {
+  const raw = String(rawText ?? '');
+  const compact = raw.replace(/\r/g, '').replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
+  const hasBullet = /[•\u2022]/.test(raw) || raw.includes('â€¢') || /\.(?=\s|$)/.test(raw);
+  const hasPlus = raw.includes('+');
+  const numericMatch = compact.match(/\b(1[0-3]|[1-9])\b/);
+  const countValue = numericMatch ? Number(numericMatch[1]) : null;
+  const cleaned = compact.replace(/[•.+]/g, ' ').replace(/\s+/g, ' ').trim();
+  return {
+    raw,
+    text: compact,
+    cleaned_text: cleaned,
+    count_value: countValue,
+    has_bullet: hasBullet,
+    has_plus: hasPlus,
+    is_marker_only: !cleaned && (hasBullet || hasPlus),
+  };
+}
+
+function classifyLabelPosition(price, bar) {
+  if (!bar || typeof price !== 'number') {
+    return { position: null, confidence: 0, delta: null };
+  }
+  const high = typeof bar.high === 'number' ? bar.high : null;
+  const low = typeof bar.low === 'number' ? bar.low : null;
+  if (high == null || low == null) {
+    return { position: null, confidence: 0, delta: null };
+  }
+
+  if (price > high) {
+    const delta = price - high;
+    return { position: 'above_bar', confidence: clamp01(delta / Math.max(Math.abs(high) * 0.002, 1)), delta: Math.round(delta * 100) / 100 };
+  }
+  if (price < low) {
+    const delta = low - price;
+    return { position: 'below_bar', confidence: clamp01(delta / Math.max(Math.abs(low) * 0.002, 1)), delta: Math.round(delta * 100) / 100 };
+  }
+  return { position: 'on_bar', confidence: 1, delta: 0 };
+}
+
+function addLevelCandidate(levels, candidate) {
+  if (candidate == null || typeof candidate.price !== 'number' || !Number.isFinite(candidate.price)) return;
+  levels.push(candidate);
+}
+
+function formatBarTime(time) {
+  if (typeof time !== 'number' || !Number.isFinite(time)) return null;
+  const ms = time > 1000000000000 ? time : time * 1000;
+  const iso = new Date(ms).toISOString();
+  return { raw: time, iso };
+}
+
+function formatBarTimeInZone(time, timeZone) {
+  if (typeof time !== 'number' || !Number.isFinite(time)) return null;
+  const ms = time > 1000000000000 ? time : time * 1000;
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(new Date(ms));
+  const lookup = {};
+  for (const part of parts) {
+    lookup[part.type] = part.value;
+  }
+  if (!lookup.year || !lookup.month || !lookup.day || !lookup.hour || !lookup.minute) return null;
+  return `${lookup.year}-${lookup.month}-${lookup.day} ${lookup.hour}:${lookup.minute}`;
+}
+
+function analyzeRiskHints(label, levels) {
+  let best = null;
+  for (const level of levels) {
+    const price = level?.price;
+    if (typeof price !== 'number' || !Number.isFinite(price)) continue;
+    const delta = Math.abs(price - label.price);
+    const sameFamily = level.family && label.count_type && level.family === label.count_type ? 1 : 0;
+    const sameShade = level.shade && label.shade && level.shade === label.shade ? 1 : 0;
+    const xSpan = typeof label.x === 'number' && typeof level.x1 === 'number' && typeof level.x2 === 'number'
+      && label.x >= Math.min(level.x1, level.x2) - 2 && label.x <= Math.max(level.x1, level.x2) + 2
+      ? 1 : 0;
+    const score = delta - (sameFamily * 0.25) - (sameShade * 0.1) - (xSpan * 0.15);
+    if (!best || score < best.score) {
+      best = {
+        price: Math.round(price * 100) / 100,
+        source: level.source,
+        family: level.family || 'unknown',
+        shade: level.shade || 'unknown',
+        x1: level.x1 ?? null,
+        x2: level.x2 ?? null,
+        delta: Math.round(delta * 100) / 100,
+        confidence: clamp01(1 - Math.min(1, delta / Math.max(Math.abs(label.price) * 0.01, 1))),
+        score,
+      };
+    }
+  }
+
+  return best
+    ? {
+        level_price: best.price,
+        source: best.source,
+        family: best.family,
+        shade: best.shade,
+        x1: best.x1,
+        x2: best.x2,
+        delta_to_label: best.delta,
+        confidence: Math.round(best.confidence * 1000) / 1000,
+      }
+    : null;
+}
+
+function resolveDemarkCountType(label, groupHasSetupMarker) {
+  const family = label?.color_reference?.family || 'unknown';
+
+  if (family === 'tdst') {
+    if (label?.is_perfect_setup) return 'setup';
+    if (groupHasSetupMarker && label?.count_value === 1) return 'sequential';
+    if (groupHasSetupMarker && label?.count_value === 9) return 'combo';
+    if (groupHasSetupMarker && label?.count_value != null) return 'combo';
+    return 'unknown';
+  }
+
+  if (label?.marker_type === 'tdst') return 'unknown';
+  if (label?.is_perfect_setup) return 'setup';
+  if (groupHasSetupMarker) {
+    if (label?.count_value === 1) return 'sequential';
+    if (label?.count_value === 9) return 'combo';
+  }
+  if (family === 'setup') return 'setup';
+  if (family === 'sequential') return 'sequential';
+  if (family === 'combo') return 'combo';
+
+  if (label?.count_value === 1) return 'sequential';
+  if (label?.count_value === 9) return 'combo';
+  return 'unknown';
+}
+
+export function analyzeDemarkGraphics({ labels = [], lines = [], boxes = [], barLookup = {}, lastIndex = null, studyName = 'DeMARK 9-13' } = {}) {
+  const labelRows = Array.isArray(labels) ? labels : [];
+  const lineRows = Array.isArray(lines) ? lines : [];
+  const boxRows = Array.isArray(boxes) ? boxes : [];
+
+  const levelCandidates = [];
+  for (const line of lineRows) {
+    if (line?.y1 == null || line?.y2 == null) continue;
+    if (line.y1 !== line.y2) continue;
+    const color = classifyDemarkColor(line.color);
+    addLevelCandidate(levelCandidates, {
+      price: line.y1,
+      source: 'line',
+      family: color.family,
+      shade: color.shade,
+      x1: line.x1,
+      x2: line.x2,
+    });
+  }
+  for (const box of boxRows) {
+    if (box?.high == null || box?.low == null) continue;
+    const color = classifyDemarkColor(box.bgColor ?? box.borderColor);
+    addLevelCandidate(levelCandidates, {
+      price: box.high,
+      source: 'box_high',
+      family: color.family,
+      shade: color.shade,
+      x1: box.x1,
+      x2: box.x2,
+    });
+    addLevelCandidate(levelCandidates, {
+      price: box.low,
+      source: 'box_low',
+      family: color.family,
+      shade: color.shade,
+      x1: box.x1,
+      x2: box.x2,
+    });
+  }
+
+  const labelsAnalyzed = labelRows.map(item => {
+    const rawText = item?.text ?? '';
+    const textInfo = normalizeDemarkText(rawText);
+    const colorInfo = classifyDemarkColor(item?.textColor ?? item?.color ?? item?.rawColor);
+    const bar = item?.x != null ? barLookup?.[String(item.x)] ?? barLookup?.[item.x] ?? null : null;
+    const positionInfo = classifyLabelPosition(item?.price, bar);
+    const countType = colorInfo.family === 'setup' || colorInfo.family === 'sequential' || colorInfo.family === 'combo'
+      ? colorInfo.family
+      : 'unknown';
+    const markerType = colorInfo.family === 'tdst' ? 'tdst' : null;
+    const directionFromPosition = positionInfo.position === 'above_bar' ? 'sell'
+      : positionInfo.position === 'below_bar' ? 'buy'
+      : null;
+    const direction = markerType === 'tdst' ? directionFromPosition : (directionFromPosition || colorInfo.direction || null);
+    const classificationConfidence = directionFromPosition
+      ? Math.round(((positionInfo.confidence * 0.7) + (colorInfo.confidence * 0.3)) * 1000) / 1000
+      : Math.round(colorInfo.confidence * 1000) / 1000;
+    const isCurrent = typeof lastIndex === 'number' && typeof item?.x === 'number'
+      ? item.x >= lastIndex - 2
+      : false;
+    const riskLevelHint = analyzeRiskHints({
+      price: item?.price ?? null,
+      x: item?.x ?? null,
+      count_type: countType,
+      shade: colorInfo.shade,
+    }, levelCandidates);
+
+    return {
+      id: item?.id ?? null,
+      x: item?.x ?? null,
+      bar_index: bar?.index ?? (item?.x ?? null),
+      bar_number: bar?.index ?? (item?.x ?? null),
+      time: formatBarTime(bar?.time ?? null),
+      price: item?.price ?? null,
+      text: textInfo.text,
+      cleaned_text: textInfo.cleaned_text,
+      count_value: textInfo.count_value,
+      count_type: countType,
+      marker_type: markerType,
+      direction,
+      direction_source: directionFromPosition ? 'position' : (colorInfo.direction ? 'color' : null),
+      shade: colorInfo.shade,
+      color: colorInfo.rgb,
+      color_argb: colorInfo.argb,
+      color_family_confidence: Math.round(colorInfo.confidence * 1000) / 1000,
+      color_reference: colorInfo.matched_reference,
+      position: positionInfo.position,
+      position_confidence: Math.round(positionInfo.confidence * 1000) / 1000,
+      position_delta: positionInfo.delta,
+      confidence: classificationConfidence,
+      is_current: isCurrent,
+      is_active: isCurrent,
+      is_perfect_setup: textInfo.has_bullet,
+      is_extension: textInfo.has_plus,
+      risk_level_hint: riskLevelHint,
+    };
+  });
+
+  const labelsSorted = labelsAnalyzed
+    .slice()
+    .sort((a, b) => {
+      if (a.x == null && b.x == null) return 0;
+      if (a.x == null) return 1;
+      if (b.x == null) return -1;
+      return a.x - b.x;
+    });
+
+  const labelsByBar = new Map();
+  for (const label of labelsSorted) {
+    const key = label.bar_index ?? label.x;
+    if (key == null) continue;
+    if (!labelsByBar.has(key)) labelsByBar.set(key, []);
+    labelsByBar.get(key).push(label);
+  }
+
+  for (const group of labelsByBar.values()) {
+    const hasSetupMarker = group.some(label => label.is_perfect_setup || label.color_reference?.family === 'setup');
+    for (const label of group) {
+      const resolvedType = resolveDemarkCountType(label, hasSetupMarker);
+      label.resolved_count_type = resolvedType;
+      if (resolvedType !== 'unknown') label.count_type = resolvedType;
+    }
+  }
+
+  const summary = {
+    label_count: labelsSorted.length,
+    current_label_count: labelsSorted.filter(l => l.is_current).length,
+    counts: {
+      setup: { buy: 0, sell: 0, unknown: 0 },
+      sequential: { buy: 0, sell: 0, unknown: 0 },
+      combo: { buy: 0, sell: 0, unknown: 0 },
+      unknown: { buy: 0, sell: 0, unknown: 0 },
+    },
+    markers: {
+      perfect_setup: 0,
+      extensions: 0,
+    },
+  };
+
+  for (const label of labelsSorted) {
+    const family = Object.prototype.hasOwnProperty.call(summary.counts, label.count_type) ? label.count_type : 'unknown';
+    const dir = label.direction === 'buy' || label.direction === 'sell' ? label.direction : 'unknown';
+    summary.counts[family][dir] += 1;
+    if (label.is_perfect_setup) summary.markers.perfect_setup += 1;
+    if (label.is_extension) summary.markers.extensions += 1;
+  }
+
+  const currentLabels = labelsSorted.filter(l => l.is_current);
+  const recentLabels = labelsSorted.slice(-DEMARK_LABEL_LIMIT);
+  const activeSignals = [];
+  const seenActive = new Set();
+  const activeSource = currentLabels.length > 0 ? currentLabels : recentLabels.slice().reverse();
+  for (const label of activeSource) {
+    const key = `${label.count_type}:${label.direction}`;
+    if (seenActive.has(key)) continue;
+    seenActive.add(key);
+    activeSignals.push({
+      label_id: label.id,
+      text: label.text,
+      count_type: label.count_type,
+      direction: label.direction,
+      is_current: label.is_current,
+      is_perfect_setup: label.is_perfect_setup,
+      is_extension: label.is_extension,
+      price: label.price,
+      x: label.x,
+      bar_index: label.bar_index,
+      bar_number: label.bar_number,
+      time: label.time,
+      confidence: label.confidence,
+    });
+  }
+  const uniqueRiskHints = [];
+  const seenRisk = new Set();
+  for (const label of currentLabels.length > 0 ? currentLabels : recentLabels) {
+    if (!label.risk_level_hint?.level_price) continue;
+    const key = `${label.risk_level_hint.level_price}:${label.risk_level_hint.source}:${label.risk_level_hint.family}`;
+    if (!seenRisk.has(key)) {
+      seenRisk.add(key);
+      uniqueRiskHints.push({
+        level_price: label.risk_level_hint.level_price,
+        source: label.risk_level_hint.source,
+        family: label.risk_level_hint.family,
+        shade: label.risk_level_hint.shade,
+        delta_to_label: label.risk_level_hint.delta_to_label,
+        confidence: label.risk_level_hint.confidence,
+        related_label_id: label.id,
+        related_label_text: label.text,
+      });
+    }
+  }
+
+  const tdstHints = labelsSorted.filter(l => l.marker_type === 'tdst' || l.color_reference?.family === 'tdst').slice(-20);
+
+  return {
+    recognized: /demark/i.test(studyName || '') || /de-mark/i.test(studyName || ''),
+    study_name: studyName || null,
+    label_count: labelRows.length,
+    labels_analyzed: labelsSorted.length,
+    current_bar_index: lastIndex,
+    summary,
+    active_signals: activeSignals.slice(0, 12),
+    current_labels: currentLabels.slice(-40),
+    labels: recentLabels,
+    risk_level_candidates: uniqueRiskHints.slice(0, 20),
+    recent_bars: Object.entries(barLookup || {})
+      .map(([key, value]) => ({
+        bar_index: Number(key),
+        bar_number: Number(key),
+        time: formatBarTime(value?.time ?? null),
+        open: value?.open ?? null,
+        high: value?.high ?? null,
+        low: value?.low ?? null,
+        close: value?.close ?? null,
+        volume: value?.volume ?? null,
+      }))
+      .filter(bar => Number.isFinite(bar.bar_index))
+      .sort((a, b) => a.bar_index - b.bar_index)
+      .slice(-2),
+    bar_snapshots: Array.from(labelsByBar.entries())
+      .map(([key, group]) => {
+        const sortedGroup = group.slice().sort((a, b) => {
+          if (a.price == null && b.price == null) return 0;
+          if (a.price == null) return 1;
+          if (b.price == null) return -1;
+          return a.price - b.price;
+        });
+        return {
+          bar_index: Number(key),
+          bar_number: Number(key),
+          time: sortedGroup[0]?.time || null,
+          labels: sortedGroup.map(label => ({
+            id: label.id,
+            text: label.text,
+            count_value: label.count_value,
+            count_type: label.count_type,
+            resolved_count_type: label.resolved_count_type || label.count_type,
+            direction: label.direction,
+            is_current: label.is_current,
+            is_perfect_setup: label.is_perfect_setup,
+            is_extension: label.is_extension,
+            confidence: label.confidence,
+            price: label.price,
+            x: label.x,
+            bar_index: label.bar_index,
+            bar_number: label.bar_number,
+            time: label.time,
+          })),
+          counts: sortedGroup.reduce((acc, label) => {
+            const keyType = label.count_type === 'setup' || label.count_type === 'sequential' || label.count_type === 'combo' ? label.count_type : 'unknown';
+            const keyDir = label.direction === 'buy' || label.direction === 'sell' ? label.direction : 'unknown';
+            acc[keyType] = acc[keyType] || { buy: 0, sell: 0, unknown: 0 };
+            acc[keyType][keyDir] = (acc[keyType][keyDir] || 0) + 1;
+            return acc;
+          }, { setup: { buy: 0, sell: 0, unknown: 0 }, sequential: { buy: 0, sell: 0, unknown: 0 }, combo: { buy: 0, sell: 0, unknown: 0 }, unknown: { buy: 0, sell: 0, unknown: 0 } }),
+          perfect_setup: sortedGroup.some(label => label.is_perfect_setup),
+          extensions: sortedGroup.filter(label => label.is_extension).length,
+        };
+      })
+      .sort((a, b) => a.bar_index - b.bar_index)
+      .slice(-8),
+    tdst: {
+      label_candidates: tdstHints.slice(-20),
+      line_candidates: lineRows
+        .filter(line => line?.y1 != null && line?.y2 != null && line.y1 === line.y2)
+        .map(line => {
+          const color = classifyDemarkColor(line.color);
+          return {
+            id: line.id ?? null,
+            price: Math.round(line.y1 * 100) / 100,
+            family: color.family,
+            shade: color.shade,
+            confidence: color.confidence,
+            x1: line.x1 ?? null,
+            x2: line.x2 ?? null,
+          };
+        })
+        .filter(l => l.family === 'tdst')
+        .slice(-20),
+      box_candidates: boxRows
+        .map(box => {
+          const color = classifyDemarkColor(box.bgColor ?? box.borderColor);
+          return {
+            id: box.id ?? null,
+            high: box.high ?? null,
+            low: box.low ?? null,
+            family: color.family,
+            shade: color.shade,
+            confidence: color.confidence,
+            x1: box.x1 ?? null,
+            x2: box.x2 ?? null,
+          };
+        })
+        .filter(b => b.family === 'tdst')
+        .slice(-20),
+    },
+  };
+}
+
+export function normalizeStudyInputs(inputDefinitions, currentInputs = [], { previewLimit = MAX_INPUT_PREVIEW } = {}) {
+  const currentMap = new Map();
+
+  if (Array.isArray(currentInputs)) {
+    for (const item of currentInputs) {
+      if (item && item.id !== undefined) currentMap.set(item.id, item.value);
+    }
+  } else if (currentInputs && typeof currentInputs === 'object') {
+    for (const [id, value] of Object.entries(currentInputs)) currentMap.set(id, value);
+  }
+
+  const defs = Array.isArray(inputDefinitions) ? inputDefinitions : [];
+  return defs.map(def => {
+    const normalized = {
+      id: def?.id ?? null,
+      name: def?.name ?? def?.localizedName ?? '',
+      localized_name: def?.localizedName ?? def?.name ?? '',
+      group: def?.group ?? null,
+      type: def?.type ?? null,
+      display: def?.display ?? null,
+      active: def?.active ?? null,
+      is_fake: !!def?.isFake,
+      hidden: !!def?.isHidden,
+    };
+
+    if (def?.inline !== undefined) normalized.inline = def.inline;
+    if (def?.min !== undefined) normalized.min = def.min;
+    if (def?.max !== undefined) normalized.max = def.max;
+    if (def?.step !== undefined) normalized.step = def.step;
+    if (Array.isArray(def?.options) && def.options.length > 0) normalized.options = def.options;
+    if (def?.defval !== undefined) normalized.default_value = previewLargeString(def.defval, previewLimit);
+    if (currentMap.has(def?.id)) normalized.value = previewLargeString(currentMap.get(def.id), previewLimit);
+
+    return normalized;
+  });
+}
+
+function simplifyMetaInfo(meta = {}) {
+  return {
+    description: meta.description ?? null,
+    short_description: meta.shortDescription ?? null,
+    id: meta.id ?? null,
+    full_id: meta.fullId ?? null,
+    package_id: meta.packageId ?? null,
+    short_id: meta.shortId ?? null,
+    script_id_part: meta.scriptIdPart ?? null,
+    version: meta.version ?? null,
+    pine: meta.pine ?? null,
+    product_id: meta.productId ?? null,
+    is_price_study: meta.is_price_study ?? null,
+    is_hidden_study: meta.is_hidden_study ?? null,
+    is_tv_script: meta.isTVScript ?? null,
+    use_version_from_meta_info: meta.useVersionFromMetaInfo ?? null,
+  };
+}
 
 function buildGraphicsJS(collectionName, mapKey, filter) {
   return `
@@ -130,6 +724,339 @@ export async function getIndicator({ entity_id }) {
     });
   }
   return { success: true, entity_id, visible: data?.visible, inputs };
+}
+
+export async function getIndicatorSnapshot({ entity_id }) {
+  if (!entity_id) throw new Error('entity_id is required. Use chart_get_state to find study IDs.');
+
+  const snapshot = await evaluate(`
+    (function() {
+      var api = ${CHART_API};
+      var study = api.getStudyById(${safeString(entity_id)});
+      if (!study) return { error: 'Study not found: ' + ${safeString(entity_id)} };
+
+      var inner = study._study || study;
+      var meta = {};
+      try { meta = inner && typeof inner.metaInfo === 'function' ? inner.metaInfo() : {}; } catch(e) {}
+
+      var inputDefinitions = [];
+      try { inputDefinitions = typeof study.getInputsInfo === 'function' ? study.getInputsInfo() : []; } catch(e) {}
+
+      var currentInputs = [];
+      try { currentInputs = typeof study.getInputValues === 'function' ? study.getInputValues() : []; } catch(e) {}
+
+      var styleValues = {};
+      try { styleValues = typeof study.getStyleValues === 'function' ? study.getStyleValues() : {}; } catch(e) {}
+
+      function previewLargeString(value, limit) {
+        if (typeof value !== 'string' || value.length <= limit) return value;
+        return { preview: value.slice(0, limit), length: value.length, truncated: true };
+      }
+
+      function simplifyMetaInfo(metaInfo) {
+        return {
+          description: metaInfo.description || null,
+          shortDescription: metaInfo.shortDescription || null,
+          id: metaInfo.id || null,
+          fullId: metaInfo.fullId || null,
+          packageId: metaInfo.packageId || null,
+          shortId: metaInfo.shortId || null,
+          scriptIdPart: metaInfo.scriptIdPart || null,
+          version: metaInfo.version || null,
+          pine: metaInfo.pine || null,
+          productId: metaInfo.productId || null,
+          is_price_study: metaInfo.is_price_study != null ? metaInfo.is_price_study : null,
+          is_hidden_study: metaInfo.is_hidden_study != null ? metaInfo.is_hidden_study : null,
+          isTVScript: metaInfo.isTVScript != null ? metaInfo.isTVScript : null,
+          useVersionFromMetaInfo: metaInfo.useVersionFromMetaInfo != null ? metaInfo.useVersionFromMetaInfo : null,
+        };
+      }
+
+      function sanitizeInput(def) {
+        def = def || {};
+        return {
+          id: def.id || null,
+          name: def.name || def.localizedName || '',
+          localizedName: def.localizedName || def.name || '',
+          group: def.group || null,
+          type: def.type || null,
+          display: def.display != null ? def.display : null,
+          active: def.active != null ? def.active : null,
+          isFake: !!def.isFake,
+          isHidden: !!def.isHidden,
+          inline: def.inline != null ? def.inline : undefined,
+          min: def.min != null ? def.min : undefined,
+          max: def.max != null ? def.max : undefined,
+          step: def.step != null ? def.step : undefined,
+          options: Array.isArray(def.options) ? def.options : undefined,
+          defval: previewLargeString(def.defval, ${MAX_INPUT_PREVIEW}),
+        };
+      }
+
+      function sanitizeCurrentInput(input) {
+        return {
+          id: input && input.id !== undefined ? input.id : null,
+          value: input ? previewLargeString(input.value, ${MAX_INPUT_PREVIEW}) : null,
+        };
+      }
+
+      function collectItems(collectionName, mapKey) {
+        var items = [];
+        try {
+          var graphics = inner && inner._graphics;
+          if (!graphics || !graphics._primitivesCollection) return items;
+          var pc = graphics._primitivesCollection;
+          var outer = pc[collectionName];
+          if (!outer) return items;
+          var innerCollection = outer.get(mapKey);
+          if (!innerCollection) return items;
+          var coll = innerCollection.get(false);
+          if (!coll || !coll._primitivesDataById || coll._primitivesDataById.size === 0) return items;
+          coll._primitivesDataById.forEach(function(v, id) { items.push({ id: id, raw: v }); });
+        } catch(e) {}
+        return items;
+      }
+
+      var graphicsSummary = {
+        line_count: collectItems('dwglines', 'lines').length,
+        label_count: collectItems('dwglabels', 'labels').length,
+        box_count: collectItems('dwgboxes', 'boxes').length,
+        table_cell_count: 0,
+      };
+
+      var tableCells = collectItems('dwgtablecells', 'tableCells');
+      if (tableCells.length === 0) tableCells = collectItems('dwgtablecells', 'tableCells');
+      graphicsSummary.table_cell_count = tableCells.length;
+
+      var bars = ${BARS_PATH};
+      var barLookup = {};
+      var firstIndex = null;
+      var lastIndex = null;
+      try {
+        if (bars && typeof bars.firstIndex === 'function' && typeof bars.lastIndex === 'function') {
+          firstIndex = bars.firstIndex();
+          lastIndex = bars.lastIndex();
+          var requestedIndexes = {};
+          if (typeof lastIndex === 'number') {
+            requestedIndexes[lastIndex] = true;
+            requestedIndexes[lastIndex - 1] = true;
+            requestedIndexes[lastIndex - 2] = true;
+          }
+        }
+      } catch(e) {}
+
+      function collectVerbose(collectionName, mapKey, mapper) {
+        var items = [];
+        try {
+          var graphics = inner && inner._graphics;
+          if (!graphics || !graphics._primitivesCollection) return items;
+          var pc = graphics._primitivesCollection;
+          var outer = pc[collectionName];
+          if (!outer) return items;
+          var innerCollection = outer.get(mapKey);
+          if (!innerCollection) return items;
+          var coll = innerCollection.get(false);
+          if (!coll || !coll._primitivesDataById || coll._primitivesDataById.size === 0) return items;
+          coll._primitivesDataById.forEach(function(v, id) {
+            try { items.push(mapper(v, id)); } catch(e) {}
+          });
+        } catch(e) {}
+        return items;
+      }
+
+      var verboseLabels = collectVerbose('dwglabels', 'labels', function(v, id) {
+        return {
+          id: id,
+          text: v.t || '',
+          price: v.y != null ? Math.round(v.y * 100) / 100 : null,
+          x: v.x != null ? v.x : null,
+          y: v.y != null ? v.y : null,
+          yloc: v.yl != null ? v.yl : null,
+          size: v.sz != null ? v.sz : null,
+          textColor: v.tci != null ? v.tci : null,
+          color: v.ci != null ? v.ci : null,
+        };
+      });
+
+      var verboseLines = collectVerbose('dwglines', 'lines', function(v, id) {
+        return {
+          id: id,
+          y1: v.y1 != null ? v.y1 : null,
+          y2: v.y2 != null ? v.y2 : null,
+          x1: v.x1 != null ? v.x1 : null,
+          x2: v.x2 != null ? v.x2 : null,
+          color: v.ci != null ? v.ci : null,
+          style: v.st != null ? v.st : null,
+          width: v.w != null ? v.w : null,
+        };
+      });
+
+      var verboseBoxes = collectVerbose('dwgboxes', 'boxes', function(v, id) {
+        return {
+          id: id,
+          high: v.y1 != null && v.y2 != null ? Math.max(v.y1, v.y2) : null,
+          low: v.y1 != null && v.y2 != null ? Math.min(v.y1, v.y2) : null,
+          x1: v.x1 != null ? v.x1 : null,
+          x2: v.x2 != null ? v.x2 : null,
+          borderColor: v.c != null ? v.c : null,
+          bgColor: v.bc != null ? v.bc : null,
+        };
+      });
+
+      try {
+        var requestedIndexes = typeof requestedIndexes === 'object' && requestedIndexes ? requestedIndexes : {};
+        for (var li = 0; li < verboseLabels.length; li++) {
+          var lx = verboseLabels[li].x;
+          if (typeof lx === 'number' && isFinite(lx)) requestedIndexes[Math.round(lx)] = true;
+        }
+        for (var ln = 0; ln < verboseLines.length; ln++) {
+          var line = verboseLines[ln];
+          if (typeof line.x1 === 'number' && isFinite(line.x1)) requestedIndexes[Math.round(line.x1)] = true;
+          if (typeof line.x2 === 'number' && isFinite(line.x2)) requestedIndexes[Math.round(line.x2)] = true;
+        }
+        for (var bi = 0; bi < verboseBoxes.length; bi++) {
+          var box = verboseBoxes[bi];
+          if (typeof box.x1 === 'number' && isFinite(box.x1)) requestedIndexes[Math.round(box.x1)] = true;
+          if (typeof box.x2 === 'number' && isFinite(box.x2)) requestedIndexes[Math.round(box.x2)] = true;
+        }
+        Object.keys(requestedIndexes).forEach(function(key) {
+          var index = Number(key);
+          if (!Number.isFinite(index)) return;
+          if (firstIndex != null && index < firstIndex) return;
+          if (lastIndex != null && index > lastIndex) return;
+          var v = bars.valueAt(index);
+          if (!v) return;
+          barLookup[index] = { index: index, time: v[0], open: v[1], high: v[2], low: v[3], close: v[4], volume: v[5] || 0 };
+        });
+      } catch(e) {}
+
+      return {
+        entity_id: ${safeString(entity_id)},
+        visible: typeof study.isVisible === 'function' ? study.isVisible() : null,
+        study_meta: simplifyMetaInfo(meta),
+        input_definitions: Array.isArray(inputDefinitions) ? inputDefinitions.map(sanitizeInput) : [],
+        current_inputs: Array.isArray(currentInputs) ? currentInputs.map(sanitizeCurrentInput) : [],
+        style_values: styleValues,
+        graphics_summary: graphicsSummary,
+        graphics: {
+          first_index: firstIndex,
+          last_index: lastIndex,
+          bars: barLookup,
+          labels: verboseLabels,
+          lines: verboseLines,
+          boxes: verboseBoxes,
+        },
+      };
+    })()
+  `);
+
+  if (snapshot?.error) throw new Error(snapshot.error);
+
+  const inputs = normalizeStudyInputs(snapshot?.input_definitions || [], snapshot?.current_inputs || []);
+  const studyName = snapshot?.study_meta?.description || snapshot?.study_meta?.short_description || snapshot?.study_meta?.shortDescription || null;
+  const demark = analyzeDemarkGraphics({
+    labels: snapshot?.graphics?.labels || [],
+    lines: snapshot?.graphics?.lines || [],
+    boxes: snapshot?.graphics?.boxes || [],
+    barLookup: snapshot?.graphics?.bars || {},
+    lastIndex: snapshot?.graphics?.last_index ?? null,
+    studyName,
+  });
+  return {
+    success: true,
+    entity_id,
+    visible: snapshot?.visible,
+    study_meta: snapshot?.study_meta || simplifyMetaInfo({}),
+    input_count: inputs.length,
+    inputs,
+    style_values: snapshot?.style_values || {},
+    graphics_summary: snapshot?.graphics_summary || { line_count: 0, label_count: 0, box_count: 0, table_cell_count: 0 },
+    recent_bars: demark?.recent_bars || [],
+    demark: demark?.recognized ? demark : null,
+  };
+}
+
+export async function getDemarkSnapshot({ entity_id }) {
+  const snapshot = await getIndicatorSnapshot({ entity_id });
+  const demark = snapshot?.demark;
+  if (!demark) {
+    return {
+      success: true,
+      entity_id,
+      recognized: false,
+      reason: 'Indicator snapshot did not resolve as DeMARK.',
+      visible: snapshot?.visible ?? null,
+      study_meta: snapshot?.study_meta ?? null,
+      input_count: snapshot?.input_count ?? 0,
+      inputs: snapshot?.inputs ?? [],
+      style_values: snapshot?.style_values ?? {},
+      graphics_summary: snapshot?.graphics_summary ?? { line_count: 0, label_count: 0, box_count: 0, table_cell_count: 0 },
+      recent_bars: snapshot?.recent_bars ?? [],
+    };
+  }
+
+  const barSnapshots = Array.isArray(demark.bar_snapshots) ? demark.bar_snapshots : [];
+  const currentBar = barSnapshots.length > 0 ? barSnapshots[barSnapshots.length - 1] : null;
+  const currentLabels = Array.isArray(currentBar?.labels)
+    ? currentBar.labels
+    : Array.isArray(demark.current_labels)
+      ? demark.current_labels
+      : Array.isArray(demark.labels)
+        ? demark.labels
+        : [];
+
+  const labels = currentLabels.map(label => ({
+    text: label.text ?? null,
+    price: label.price ?? null,
+    x: label.x ?? null,
+    bar_index: label.bar_index ?? label.x ?? null,
+    resolved_count_type: label.resolved_count_type || label.count_type || 'unknown',
+    direction: label.direction || null,
+    position: label.position || null,
+    confidence: label.confidence ?? null,
+    count_value: label.count_value ?? null,
+    is_current: !!label.is_current,
+    is_perfect_setup: !!label.is_perfect_setup,
+    is_extension: !!label.is_extension,
+    shade: label.shade ?? null,
+    marker_type: label.marker_type ?? null,
+  }));
+
+  const currentTime = currentBar?.time?.raw ?? demark.recent_bars?.[demark.recent_bars.length - 1]?.time?.raw ?? null;
+  const currentBarIndex = currentBar?.bar_index ?? demark.current_bar_index ?? null;
+  const currentOhlcv = currentBar
+    ? {
+        open: currentBar.open ?? null,
+        high: currentBar.high ?? null,
+        low: currentBar.low ?? null,
+        close: currentBar.close ?? null,
+        volume: currentBar.volume ?? null,
+      }
+    : null;
+
+  return {
+    success: true,
+    entity_id,
+    visible: snapshot?.visible ?? null,
+    study_meta: snapshot?.study_meta || null,
+    bar_index: currentBarIndex,
+    x: currentBarIndex,
+    time: currentTime != null ? {
+      israel: formatBarTimeInZone(currentTime, 'Asia/Jerusalem'),
+      utc: currentBar?.time?.iso || formatBarTime(currentTime)?.iso || null,
+      raw: currentTime,
+    } : null,
+    ohlcv: currentOhlcv,
+    labels,
+    perfect_setup: !!currentBar?.perfect_setup,
+    extensions: currentBar?.extensions ?? 0,
+    summary: demark.summary || null,
+    active_signals: Array.isArray(demark.active_signals) ? demark.active_signals : [],
+    risk_level_candidates: Array.isArray(demark.risk_level_candidates) ? demark.risk_level_candidates : [],
+    tdst: demark.tdst || null,
+    recent_bars: Array.isArray(demark.recent_bars) ? demark.recent_bars : [],
+    source: 'indicator_snapshot',
+  };
 }
 
 export async function getStrategyResults() {
