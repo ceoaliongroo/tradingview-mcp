@@ -290,4 +290,27 @@ describe('normalizeStudyInputs', () => {
     assert.equal(byTime.x, 49);
     assert.equal(byTime.selection_mode, 'time');
   });
+
+  it('includes a one-bar historical cluster around the selected bar', () => {
+    const demark = analyzeDemarkGraphics({
+      studyName: 'DeMARK 9-13',
+      lastIndex: 60,
+      barLookup: {
+        59: { index: 59, time: 1000, open: 100, high: 110, low: 90, close: 105, volume: 10 },
+        60: { index: 60, time: 1060, open: 105, high: 112, low: 96, close: 108, volume: 11 },
+      },
+      labels: [
+        { id: 'bar-59', text: '2', price: 111, x: 59, textColor: 4281898556 },
+        { id: 'bar-60', text: '2', price: 113, x: 60, textColor: 4288220711 },
+      ],
+    });
+
+    const resolved = buildResolvedDemarkSnapshot(demark, null, { selection: { mode: 'time', value: 1000 } });
+    assert.equal(resolved.bar_index, 59);
+    assert.equal(resolved.labels.length, 1);
+    assert.equal(resolved.cluster_bars.length, 2);
+    assert.equal(resolved.cluster_labels.length, 2);
+    assert.equal(resolved.cluster_labels[0].text, '2');
+    assert.equal(resolved.cluster_labels[1].text, '2');
+  });
 });

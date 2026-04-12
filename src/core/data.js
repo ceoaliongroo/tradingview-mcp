@@ -332,6 +332,45 @@ function selectBarSnapshotBySelection(barSnapshots, visibleRange, selection) {
   return selectLatestBarSnapshot(bars) || selectBarSnapshotByVisibleRange(bars, visibleRange);
 }
 
+function dedupeLabelsByIdentity(labels) {
+  const seen = new Set();
+  const result = [];
+  for (const label of Array.isArray(labels) ? labels : []) {
+    const key = [
+      label?.id ?? '',
+      label?.bar_index ?? '',
+      label?.x ?? '',
+      label?.text ?? '',
+      label?.price ?? '',
+      label?.resolved_count_type ?? label?.count_type ?? '',
+      label?.direction ?? '',
+    ].join('|');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(label);
+  }
+  return result;
+}
+
+function summarizeClusterLabels(labels) {
+  const summary = {
+    setup: { buy: 0, sell: 0, unknown: 0 },
+    sequential: { buy: 0, sell: 0, unknown: 0 },
+    combo: { buy: 0, sell: 0, unknown: 0 },
+    unknown: { buy: 0, sell: 0, unknown: 0 },
+  };
+
+  for (const label of Array.isArray(labels) ? labels : []) {
+    const family = Object.prototype.hasOwnProperty.call(summary, label?.resolved_count_type || label?.count_type)
+      ? (label?.resolved_count_type || label?.count_type)
+      : 'unknown';
+    const direction = label?.direction === 'buy' || label?.direction === 'sell' ? label.direction : 'unknown';
+    summary[family][direction] += 1;
+  }
+
+  return summary;
+}
+
 export function buildResolvedDemarkSnapshot(demark, visibleRange, { selection = { mode: 'latest', value: null } } = {}) {
   if (!demark) return null;
 
@@ -373,6 +412,14 @@ export function buildResolvedDemarkSnapshot(demark, visibleRange, { selection = 
         volume: currentBar.volume ?? null,
       }
     : null;
+  const currentBarCluster = Number.isFinite(currentBarIndex)
+    ? barSnapshots
+        .filter(bar => Number.isFinite(bar?.bar_index) && Math.abs(bar.bar_index - currentBarIndex) <= 1)
+        .sort((a, b) => a.bar_index - b.bar_index)
+    : [];
+  const currentBarClusterLabels = dedupeLabelsByIdentity(
+    currentBarCluster.flatMap(bar => Array.isArray(bar.labels) ? bar.labels : [])
+  );
 
   return {
     bar_index: currentBarIndex,
@@ -396,6 +443,36 @@ export function buildResolvedDemarkSnapshot(demark, visibleRange, { selection = 
     risk_level_candidates: Array.isArray(demark.risk_level_candidates) ? demark.risk_level_candidates : [],
     tdst: demark.tdst || null,
     recent_bars: Array.isArray(demark.recent_bars) ? demark.recent_bars : [],
+    cluster_bars: currentBarCluster.map(bar => ({
+      bar_index: bar.bar_index,
+      bar_number: bar.bar_number,
+      time: bar.time || null,
+      open: bar.open ?? null,
+      high: bar.high ?? null,
+      low: bar.low ?? null,
+      close: bar.close ?? null,
+      volume: bar.volume ?? null,
+      label_count: Array.isArray(bar.labels) ? bar.labels.length : 0,
+      perfect_setup: !!bar.perfect_setup,
+      extensions: bar.extensions ?? 0,
+    })),
+    cluster_labels: currentBarClusterLabels.map(label => ({
+      text: label.text ?? null,
+      price: label.price ?? null,
+      x: label.bar_index ?? null,
+      bar_index: label.bar_index ?? null,
+      resolved_count_type: label.resolved_count_type || label.count_type || 'unknown',
+      direction: label.direction || null,
+      position: label.position || null,
+      confidence: label.confidence ?? null,
+      count_value: label.count_value ?? null,
+      is_current: !!label.is_current,
+      is_perfect_setup: !!label.is_perfect_setup,
+      is_extension: !!label.is_extension,
+      shade: label.shade ?? null,
+      marker_type: label.marker_type ?? null,
+    })),
+    cluster_summary: summarizeClusterLabels(currentBarClusterLabels),
     visible_range: visibleRange && !visibleRange.error ? visibleRange : null,
     current_bar_index: currentBarIndex,
     selection_mode: normalizeSelection(selection).mode,
