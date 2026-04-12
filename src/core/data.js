@@ -247,6 +247,163 @@ function resolveDemarkCountType(label, groupHasSetupMarker) {
   return 'unknown';
 }
 
+function sanitizePublicLabel(label) {
+  return label;
+}
+
+export function selectBarSnapshotByVisibleRange(barSnapshots, visibleRange) {
+  if (!Array.isArray(barSnapshots) || barSnapshots.length === 0) return null;
+  const bars = barSnapshots.filter(bar => Number.isFinite(bar?.bar_index));
+  if (bars.length === 0) return null;
+
+  const from = Number(visibleRange?.from);
+  const to = Number(visibleRange?.to);
+  const hasRange = Number.isFinite(from) && Number.isFinite(to) && to >= from;
+  if (!hasRange) {
+    return bars[bars.length - 1] || null;
+  }
+
+  const target = (from + to) / 2;
+  let best = null;
+  for (const bar of bars) {
+    const timeRaw = Number(bar?.time?.raw);
+    if (!Number.isFinite(timeRaw)) continue;
+    const score = Math.abs(timeRaw - target);
+    if (!best || score < best.score || (score === best.score && bar.bar_index > best.bar.bar_index)) {
+      best = { bar, score };
+    }
+  }
+
+  return best?.bar || bars[bars.length - 1] || null;
+}
+
+function selectLatestBarSnapshot(barSnapshots) {
+  if (!Array.isArray(barSnapshots) || barSnapshots.length === 0) return null;
+  return barSnapshots.filter(bar => Number.isFinite(bar?.bar_index)).sort((a, b) => a.bar_index - b.bar_index).at(-1) || null;
+}
+
+function normalizeSelection(selection) {
+  if (!selection || typeof selection !== 'object') return { mode: 'latest', value: null };
+  const mode = typeof selection.mode === 'string' ? selection.mode : 'latest';
+  return {
+    mode,
+    value: selection.value ?? null,
+  };
+}
+
+function selectBarSnapshotBySelection(barSnapshots, visibleRange, selection) {
+  const normalized = normalizeSelection(selection);
+  const bars = Array.isArray(barSnapshots) ? barSnapshots.filter(bar => Number.isFinite(bar?.bar_index)) : [];
+  if (bars.length === 0) return null;
+
+  if (normalized.mode === 'visible') {
+    return selectBarSnapshotByVisibleRange(bars, visibleRange) || selectLatestBarSnapshot(bars);
+  }
+
+  if (normalized.mode === 'bar_index') {
+    const targetIndex = Number(normalized.value);
+    if (Number.isFinite(targetIndex)) {
+      return bars.find(bar => Number(bar.bar_index) === targetIndex) || selectLatestBarSnapshot(bars);
+    }
+    return selectLatestBarSnapshot(bars);
+  }
+
+  if (normalized.mode === 'time') {
+    const targetTime = typeof normalized.value === 'number'
+      ? normalized.value
+      : /^\d+$/.test(String(normalized.value ?? ''))
+        ? Number(normalized.value)
+        : Number.isFinite(Date.parse(normalized.value)) ? Math.floor(new Date(normalized.value).getTime() / 1000) : null;
+    if (Number.isFinite(targetTime)) {
+      let best = null;
+      for (const bar of bars) {
+        const timeRaw = Number(bar?.time?.raw);
+        if (!Number.isFinite(timeRaw)) continue;
+        const score = Math.abs(timeRaw - targetTime);
+        if (!best || score < best.score || (score === best.score && bar.bar_index > best.bar.bar_index)) {
+          best = { bar, score };
+        }
+      }
+      return best?.bar || selectLatestBarSnapshot(bars);
+    }
+    return selectLatestBarSnapshot(bars);
+  }
+
+  return selectLatestBarSnapshot(bars) || selectBarSnapshotByVisibleRange(bars, visibleRange);
+}
+
+export function buildResolvedDemarkSnapshot(demark, visibleRange, { selection = { mode: 'latest', value: null } } = {}) {
+  if (!demark) return null;
+
+  const barSnapshots = Array.isArray(demark.bar_snapshots) ? demark.bar_snapshots : [];
+  const currentBar = selectBarSnapshotBySelection(barSnapshots, visibleRange, selection) || selectLatestBarSnapshot(barSnapshots) || selectBarSnapshotByVisibleRange(barSnapshots, visibleRange);
+  const currentLabels = Array.isArray(currentBar?.labels)
+    ? currentBar.labels
+    : Array.isArray(demark.current_labels)
+      ? demark.current_labels
+      : Array.isArray(demark.labels)
+        ? demark.labels
+        : [];
+
+  const labels = currentLabels.map(label => ({
+    text: label.text ?? null,
+    price: label.price ?? null,
+    x: label.bar_index ?? null,
+    bar_index: label.bar_index ?? null,
+    resolved_count_type: label.resolved_count_type || label.count_type || 'unknown',
+    direction: label.direction || null,
+    position: label.position || null,
+    confidence: label.confidence ?? null,
+    count_value: label.count_value ?? null,
+    is_current: !!label.is_current,
+    is_perfect_setup: !!label.is_perfect_setup,
+    is_extension: !!label.is_extension,
+    shade: label.shade ?? null,
+    marker_type: label.marker_type ?? null,
+  }));
+
+  const currentBarIndex = currentBar?.bar_index ?? demark.current_bar_index ?? null;
+  const currentTime = currentBar?.time?.raw ?? demark.recent_bars?.[demark.recent_bars.length - 1]?.time?.raw ?? null;
+  const currentOhlcv = currentBar
+    ? {
+        open: currentBar.open ?? null,
+        high: currentBar.high ?? null,
+        low: currentBar.low ?? null,
+        close: currentBar.close ?? null,
+        volume: currentBar.volume ?? null,
+      }
+    : null;
+
+  return {
+    bar_index: currentBarIndex,
+    x: currentBarIndex,
+    time: currentTime != null ? {
+      israel: formatBarTimeInZone(currentTime, 'Asia/Jerusalem'),
+      utc: currentBar?.time?.iso || formatBarTime(currentTime)?.iso || null,
+      raw: currentTime,
+    } : null,
+    ohlcv: currentOhlcv,
+    labels,
+    perfect_setup: !!currentBar?.perfect_setup,
+    extensions: currentBar?.extensions ?? 0,
+    summary: demark.summary || null,
+    active_signals: Array.isArray(demark.active_signals)
+      ? demark.active_signals.map(signal => ({
+          ...signal,
+          x: signal.bar_index ?? null,
+        }))
+      : [],
+    risk_level_candidates: Array.isArray(demark.risk_level_candidates) ? demark.risk_level_candidates : [],
+    tdst: demark.tdst || null,
+    recent_bars: Array.isArray(demark.recent_bars) ? demark.recent_bars : [],
+    visible_range: visibleRange && !visibleRange.error ? visibleRange : null,
+    current_bar_index: currentBarIndex,
+    selection_mode: normalizeSelection(selection).mode,
+    selection_value: normalizeSelection(selection).value,
+    source: 'resolved_demark_snapshot',
+  };
+}
+
 export function analyzeDemarkGraphics({ labels = [], lines = [], boxes = [], barLookup = {}, lastIndex = null, studyName = 'DeMARK 9-13' } = {}) {
   const labelRows = Array.isArray(labels) ? labels : [];
   const lineRows = Array.isArray(lines) ? lines : [];
@@ -412,9 +569,9 @@ export function analyzeDemarkGraphics({ labels = [], lines = [], boxes = [], bar
       is_perfect_setup: label.is_perfect_setup,
       is_extension: label.is_extension,
       price: label.price,
-      x: label.x,
       bar_index: label.bar_index,
       bar_number: label.bar_number,
+      x: label.x,
       time: label.time,
       confidence: label.confidence,
     });
@@ -448,9 +605,9 @@ export function analyzeDemarkGraphics({ labels = [], lines = [], boxes = [], bar
     labels_analyzed: labelsSorted.length,
     current_bar_index: lastIndex,
     summary,
-    active_signals: activeSignals.slice(0, 12),
-    current_labels: currentLabels.slice(-40),
-    labels: recentLabels,
+    active_signals: activeSignals.slice(0, 12).map(sanitizePublicLabel),
+    current_labels: currentLabels.slice(-40).map(sanitizePublicLabel),
+    labels: recentLabels.map(sanitizePublicLabel),
     risk_level_candidates: uniqueRiskHints.slice(0, 20),
     recent_bars: Object.entries(barLookup || {})
       .map(([key, value]) => ({
@@ -478,6 +635,58 @@ export function analyzeDemarkGraphics({ labels = [], lines = [], boxes = [], bar
           bar_index: Number(key),
           bar_number: Number(key),
           time: sortedGroup[0]?.time || null,
+          open: barLookup?.[key]?.open ?? null,
+          high: barLookup?.[key]?.high ?? null,
+          low: barLookup?.[key]?.low ?? null,
+          close: barLookup?.[key]?.close ?? null,
+          volume: barLookup?.[key]?.volume ?? null,
+          labels: sortedGroup.map(label => ({
+            id: label.id,
+            text: label.text,
+            count_value: label.count_value,
+            count_type: label.count_type,
+            resolved_count_type: label.resolved_count_type || label.count_type,
+            direction: label.direction,
+            is_current: label.is_current,
+            is_perfect_setup: label.is_perfect_setup,
+            is_extension: label.is_extension,
+            confidence: label.confidence,
+            price: label.price,
+            x: label.x,
+            bar_index: label.bar_index,
+            bar_number: label.bar_number,
+            time: label.time,
+          })),
+          counts: sortedGroup.reduce((acc, label) => {
+            const keyType = label.count_type === 'setup' || label.count_type === 'sequential' || label.count_type === 'combo' ? label.count_type : 'unknown';
+            const keyDir = label.direction === 'buy' || label.direction === 'sell' ? label.direction : 'unknown';
+            acc[keyType] = acc[keyType] || { buy: 0, sell: 0, unknown: 0 };
+            acc[keyType][keyDir] = (acc[keyType][keyDir] || 0) + 1;
+            return acc;
+          }, { setup: { buy: 0, sell: 0, unknown: 0 }, sequential: { buy: 0, sell: 0, unknown: 0 }, combo: { buy: 0, sell: 0, unknown: 0 }, unknown: { buy: 0, sell: 0, unknown: 0 } }),
+          perfect_setup: sortedGroup.some(label => label.is_perfect_setup),
+          extensions: sortedGroup.filter(label => label.is_extension).length,
+        };
+      })
+      .sort((a, b) => a.bar_index - b.bar_index)
+      ,
+    bar_snapshots_recent: Array.from(labelsByBar.entries())
+      .map(([key, group]) => {
+        const sortedGroup = group.slice().sort((a, b) => {
+          if (a.price == null && b.price == null) return 0;
+          if (a.price == null) return 1;
+          if (b.price == null) return -1;
+          return a.price - b.price;
+        });
+        return {
+          bar_index: Number(key),
+          bar_number: Number(key),
+          time: sortedGroup[0]?.time || null,
+          open: barLookup?.[key]?.open ?? null,
+          high: barLookup?.[key]?.high ?? null,
+          low: barLookup?.[key]?.low ?? null,
+          close: barLookup?.[key]?.close ?? null,
+          volume: barLookup?.[key]?.volume ?? null,
           labels: sortedGroup.map(label => ({
             id: label.id,
             text: label.text,
@@ -726,7 +935,7 @@ export async function getIndicator({ entity_id }) {
   return { success: true, entity_id, visible: data?.visible, inputs };
 }
 
-export async function getIndicatorSnapshot({ entity_id }) {
+export async function getIndicatorSnapshot({ entity_id, compact = false, selection = { mode: 'latest', value: null } } = {}) {
   if (!entity_id) throw new Error('entity_id is required. Use chart_get_state to find study IDs.');
 
   const snapshot = await evaluate(`
@@ -832,6 +1041,7 @@ export async function getIndicatorSnapshot({ entity_id }) {
       var barLookup = {};
       var firstIndex = null;
       var lastIndex = null;
+      var visibleRange = null;
       try {
         if (bars && typeof bars.firstIndex === 'function' && typeof bars.lastIndex === 'function') {
           firstIndex = bars.firstIndex();
@@ -843,6 +1053,11 @@ export async function getIndicatorSnapshot({ entity_id }) {
             requestedIndexes[lastIndex - 2] = true;
           }
         }
+      } catch(e) {}
+
+      try {
+        var range = api.getVisibleRange();
+        if (range) visibleRange = { from: range.from != null ? range.from : null, to: range.to != null ? range.to : null };
       } catch(e) {}
 
       function collectVerbose(collectionName, mapKey, mapper) {
@@ -946,6 +1161,7 @@ export async function getIndicatorSnapshot({ entity_id }) {
           lines: verboseLines,
           boxes: verboseBoxes,
         },
+        visible_range: visibleRange,
       };
     })()
   `);
@@ -962,7 +1178,8 @@ export async function getIndicatorSnapshot({ entity_id }) {
     lastIndex: snapshot?.graphics?.last_index ?? null,
     studyName,
   });
-  return {
+  const resolvedSnapshot = demark?.recognized ? buildResolvedDemarkSnapshot(demark, snapshot?.visible_range || null, { selection }) : null;
+  const fullResult = {
     success: true,
     entity_id,
     visible: snapshot?.visible,
@@ -973,11 +1190,41 @@ export async function getIndicatorSnapshot({ entity_id }) {
     graphics_summary: snapshot?.graphics_summary || { line_count: 0, label_count: 0, box_count: 0, table_cell_count: 0 },
     recent_bars: demark?.recent_bars || [],
     demark: demark?.recognized ? demark : null,
+    visible_range: snapshot?.visible_range ?? null,
+    ...(resolvedSnapshot || {}),
+    resolved_snapshot: resolvedSnapshot,
+    source: 'indicator_snapshot',
+  };
+
+  if (!compact) return fullResult;
+
+  return {
+    success: true,
+    entity_id,
+    visible: snapshot?.visible,
+    study_meta: snapshot?.study_meta || simplifyMetaInfo({}),
+    input_count: inputs.length,
+    inputs,
+    style_values: snapshot?.style_values || {},
+    graphics_summary: snapshot?.graphics_summary || { line_count: 0, label_count: 0, box_count: 0, table_cell_count: 0 },
+    recent_bars: demark?.recent_bars || [],
+    visible_range: snapshot?.visible_range ?? null,
+    resolved_snapshot: resolvedSnapshot,
+    demark: demark?.recognized ? {
+      recognized: true,
+      study_name: demark.study_name,
+      label_count: demark.label_count,
+      labels_analyzed: demark.labels_analyzed,
+      current_bar_index: demark.current_bar_index,
+      summary: demark.summary,
+      recent_bars: demark.recent_bars,
+    } : null,
+    source: 'indicator_snapshot',
   };
 }
 
-export async function getDemarkSnapshot({ entity_id }) {
-  const snapshot = await getIndicatorSnapshot({ entity_id });
+export async function getDemarkSnapshot({ entity_id, compact = true, selection = { mode: 'latest', value: null } }) {
+  const snapshot = await getIndicatorSnapshot({ entity_id, compact, selection });
   const demark = snapshot?.demark;
   if (!demark) {
     return {
@@ -992,70 +1239,48 @@ export async function getDemarkSnapshot({ entity_id }) {
       style_values: snapshot?.style_values ?? {},
       graphics_summary: snapshot?.graphics_summary ?? { line_count: 0, label_count: 0, box_count: 0, table_cell_count: 0 },
       recent_bars: snapshot?.recent_bars ?? [],
+      visible_range: snapshot?.visible_range ?? null,
+      resolved_snapshot: null,
+      indicator_snapshot: {
+        success: snapshot?.success ?? true,
+        entity_id: snapshot?.entity_id ?? entity_id,
+        visible: snapshot?.visible ?? null,
+        study_meta: snapshot?.study_meta ?? null,
+        input_count: snapshot?.input_count ?? 0,
+        inputs: snapshot?.inputs ?? [],
+        style_values: snapshot?.style_values ?? {},
+        graphics_summary: snapshot?.graphics_summary ?? { line_count: 0, label_count: 0, box_count: 0, table_cell_count: 0 },
+        recent_bars: snapshot?.recent_bars ?? [],
+        visible_range: snapshot?.visible_range ?? null,
+        demark: null,
+      },
     };
   }
 
-  const barSnapshots = Array.isArray(demark.bar_snapshots) ? demark.bar_snapshots : [];
-  const currentBar = barSnapshots.length > 0 ? barSnapshots[barSnapshots.length - 1] : null;
-  const currentLabels = Array.isArray(currentBar?.labels)
-    ? currentBar.labels
-    : Array.isArray(demark.current_labels)
-      ? demark.current_labels
-      : Array.isArray(demark.labels)
-        ? demark.labels
-        : [];
-
-  const labels = currentLabels.map(label => ({
-    text: label.text ?? null,
-    price: label.price ?? null,
-    x: label.x ?? null,
-    bar_index: label.bar_index ?? label.x ?? null,
-    resolved_count_type: label.resolved_count_type || label.count_type || 'unknown',
-    direction: label.direction || null,
-    position: label.position || null,
-    confidence: label.confidence ?? null,
-    count_value: label.count_value ?? null,
-    is_current: !!label.is_current,
-    is_perfect_setup: !!label.is_perfect_setup,
-    is_extension: !!label.is_extension,
-    shade: label.shade ?? null,
-    marker_type: label.marker_type ?? null,
-  }));
-
-  const currentTime = currentBar?.time?.raw ?? demark.recent_bars?.[demark.recent_bars.length - 1]?.time?.raw ?? null;
-  const currentBarIndex = currentBar?.bar_index ?? demark.current_bar_index ?? null;
-  const currentOhlcv = currentBar
-    ? {
-        open: currentBar.open ?? null,
-        high: currentBar.high ?? null,
-        low: currentBar.low ?? null,
-        close: currentBar.close ?? null,
-        volume: currentBar.volume ?? null,
-      }
-    : null;
+  const resolvedSnapshot = snapshot?.resolved_snapshot || buildResolvedDemarkSnapshot(demark, snapshot?.visible_range || null, { selection });
 
   return {
     success: true,
     entity_id,
     visible: snapshot?.visible ?? null,
     study_meta: snapshot?.study_meta || null,
-    bar_index: currentBarIndex,
-    x: currentBarIndex,
-    time: currentTime != null ? {
-      israel: formatBarTimeInZone(currentTime, 'Asia/Jerusalem'),
-      utc: currentBar?.time?.iso || formatBarTime(currentTime)?.iso || null,
-      raw: currentTime,
-    } : null,
-    ohlcv: currentOhlcv,
-    labels,
-    perfect_setup: !!currentBar?.perfect_setup,
-    extensions: currentBar?.extensions ?? 0,
-    summary: demark.summary || null,
-    active_signals: Array.isArray(demark.active_signals) ? demark.active_signals : [],
-    risk_level_candidates: Array.isArray(demark.risk_level_candidates) ? demark.risk_level_candidates : [],
-    tdst: demark.tdst || null,
-    recent_bars: Array.isArray(demark.recent_bars) ? demark.recent_bars : [],
-    source: 'indicator_snapshot',
+    ...(resolvedSnapshot || {}),
+    resolved_snapshot: resolvedSnapshot,
+    indicator_snapshot: {
+      success: snapshot?.success ?? true,
+      entity_id: snapshot?.entity_id ?? entity_id,
+      visible: snapshot?.visible ?? null,
+      study_meta: snapshot?.study_meta || null,
+      input_count: snapshot?.input_count ?? 0,
+      inputs: snapshot?.inputs ?? [],
+      style_values: snapshot?.style_values ?? {},
+      graphics_summary: snapshot?.graphics_summary ?? { line_count: 0, label_count: 0, box_count: 0, table_cell_count: 0 },
+      recent_bars: snapshot?.recent_bars ?? [],
+      visible_range: snapshot?.visible_range ?? null,
+      demark: snapshot?.demark ?? null,
+    },
+    visible_range: snapshot?.visible_range ?? null,
+    source: 'demark_snapshot',
   };
 }
 

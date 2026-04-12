@@ -20,15 +20,33 @@ export function registerDataTools(server) {
 
   server.tool('data_get_indicator_snapshot', 'Get a full indicator snapshot with normalized input names, current values, style values, and graphics counts', {
     entity_id: z.string().describe('Study entity ID (from chart_get_state)'),
-  }, async ({ entity_id }) => {
-    try { return jsonResult(await core.getIndicatorSnapshot({ entity_id })); }
+    compact: z.coerce.boolean().optional().describe('Return a compact snapshot for faster responses (default false)'),
+    selection_mode: z.enum(['latest', 'visible', 'bar_index', 'time']).optional().describe('How to choose the bar snapshot'),
+    selection_value: z.union([z.string(), z.coerce.number()]).optional().describe('Value used by the selection mode'),
+  }, async ({ entity_id, compact, selection_mode, selection_value }) => {
+    try {
+      return jsonResult(await core.getIndicatorSnapshot({
+        entity_id,
+        compact: compact ?? false,
+        selection: selection_mode ? { mode: selection_mode, value: selection_value ?? null } : { mode: 'latest', value: null },
+      }));
+    }
     catch (err) { return jsonResult({ success: false, error: err.message }, true); }
   });
 
   server.tool('data_get_demark_snapshot', 'Get a resolved DeMARK 9-13 snapshot with count type, direction, position, confidence, current bar, and risk hints', {
     entity_id: z.string().describe('Study entity ID (from chart_get_state)'),
-  }, async ({ entity_id }) => {
-    try { return jsonResult(await core.getDemarkSnapshot({ entity_id })); }
+    compact: z.coerce.boolean().optional().describe('Return the compact MCP payload instead of the raw study dump (default true)'),
+    selection_mode: z.enum(['latest', 'visible', 'bar_index', 'time']).optional().describe('How to choose the bar snapshot'),
+    selection_value: z.union([z.string(), z.coerce.number()]).optional().describe('Value used by the selection mode'),
+  }, async ({ entity_id, compact, selection_mode, selection_value }) => {
+    try {
+      return jsonResult(await core.getDemarkSnapshot({
+        entity_id,
+        compact: compact ?? true,
+        selection: selection_mode ? { mode: selection_mode, value: selection_value ?? null } : { mode: 'latest', value: null },
+      }));
+    }
     catch (err) { return jsonResult({ success: false, error: err.message }, true); }
   });
 

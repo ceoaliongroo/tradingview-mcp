@@ -86,9 +86,18 @@ register('data', {
     }],
     ['snapshot', {
       description: 'Get a full indicator snapshot with normalized input names, current values, style values, and graphics counts',
+      options: {
+        compact: { type: 'boolean', short: 'c', description: 'Return a compact snapshot for faster responses' },
+        mode: { type: 'string', short: 'm', description: 'Bar selection mode: latest, visible, bar_index, time' },
+        value: { type: 'string', short: 'v', description: 'Selection value for bar_index or time mode' },
+      },
       handler: (opts, positionals) => {
         if (!positionals[0]) throw new Error('Entity ID required. Usage: tv data snapshot eFu1Ot');
-        return core.getIndicatorSnapshot({ entity_id: positionals[0] });
+        return core.getIndicatorSnapshot({
+          entity_id: positionals[0],
+          compact: opts.compact ?? false,
+          selection: opts.mode ? { mode: opts.mode, value: opts.value ?? null } : { mode: 'latest', value: null },
+        });
       },
     }],
   ]),

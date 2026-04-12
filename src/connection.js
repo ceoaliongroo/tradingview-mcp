@@ -2,7 +2,12 @@ import CDP from 'chrome-remote-interface';
 
 let client = null;
 let targetInfo = null;
-const CDP_HOST = 'localhost';
+const CDP_HOST = process.env.TRADINGVIEW_CDP_HOST || '127.0.0.1';
+const CDP_FALLBACK_HOSTS = Array.from(new Set([
+  CDP_HOST,
+  '127.0.0.1',
+  'localhost',
+])).filter(Boolean);
 const CDP_PORT = 9222;
 const MAX_RETRIES = 5;
 const BASE_DELAY = 500;
@@ -65,12 +70,12 @@ export async function connect() {
   let lastError;
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
-      const target = await findChartTarget();
+      const { target, host } = await findChartTarget();
       if (!target) {
         throw new Error('No TradingView chart target found. Is TradingView open with a chart?');
       }
       targetInfo = target;
-      client = await CDP({ host: CDP_HOST, port: CDP_PORT, target: target.id });
+      client = await CDP({ host, port: CDP_PORT, target: target.id });
 
       // Enable required domains
       await client.Runtime.enable();
@@ -88,12 +93,20 @@ export async function connect() {
 }
 
 async function findChartTarget() {
-  const resp = await fetch(`http://${CDP_HOST}:${CDP_PORT}/json/list`);
-  const targets = await resp.json();
-  // Prefer targets with tradingview.com/chart in the URL
-  return targets.find(t => t.type === 'page' && /tradingview\.com\/chart/i.test(t.url))
-    || targets.find(t => t.type === 'page' && /tradingview/i.test(t.url))
-    || null;
+  let lastError = null;
+  for (const host of CDP_FALLBACK_HOSTS) {
+    try {
+      const resp = await fetch(`http://${host}:${CDP_PORT}/json/list`);
+      const targets = await resp.json();
+      const target = targets.find(t => t.type === 'page' && /tradingview\.com\/chart/i.test(t.url))
+        || targets.find(t => t.type === 'page' && /tradingview/i.test(t.url))
+        || null;
+      if (target) return { target, host };
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError || new Error('No TradingView chart target found. Is TradingView open with a chart?');
 }
 
 export async function getTargetInfo() {

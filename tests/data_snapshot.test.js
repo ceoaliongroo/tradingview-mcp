@@ -8,9 +8,11 @@ import assert from 'node:assert/strict';
 
 import {
   analyzeDemarkGraphics,
+  buildResolvedDemarkSnapshot,
   classifyDemarkColor,
   normalizeDemarkText,
   normalizeStudyInputs,
+  selectBarSnapshotByVisibleRange,
 } from '../src/core/data.js';
 
 describe('normalizeStudyInputs', () => {
@@ -148,6 +150,10 @@ describe('normalizeStudyInputs', () => {
     assert.equal(result.current_labels[0].is_extension, true);
     assert.equal(result.current_labels[0].is_current, true);
     assert.equal(result.current_labels[0].time.iso, '1970-01-01T00:00:01.000Z');
+    assert.equal(result.current_labels[0].x, 10);
+    assert.equal(result.active_signals[0].x, 10);
+    assert.equal(result.labels[0].x, 10);
+    assert.equal(result.bar_snapshots[0].labels[0].x, 10);
     assert.equal(result.risk_level_candidates.length, 1);
     assert.equal(result.risk_level_candidates[0].source, 'line');
     assert.equal(result.tdst.line_candidates.length, 1);
@@ -173,5 +179,115 @@ describe('normalizeStudyInputs', () => {
     assert.equal(result.summary.counts.setup.sell, 1);
     assert.equal(result.summary.counts.sequential.sell, 1);
     assert.equal(result.summary.counts.combo.sell, 1);
+  });
+
+  it('keeps all bar snapshots available for selection', () => {
+    const result = analyzeDemarkGraphics({
+      studyName: 'DeMARK 9-13',
+      lastIndex: 12,
+      barLookup: {
+        1: { index: 1, time: 1, open: 10, high: 11, low: 9, close: 10, volume: 1 },
+        2: { index: 2, time: 2, open: 10, high: 11, low: 9, close: 10, volume: 1 },
+        3: { index: 3, time: 3, open: 10, high: 11, low: 9, close: 10, volume: 1 },
+        4: { index: 4, time: 4, open: 10, high: 11, low: 9, close: 10, volume: 1 },
+        5: { index: 5, time: 5, open: 10, high: 11, low: 9, close: 10, volume: 1 },
+        6: { index: 6, time: 6, open: 10, high: 11, low: 9, close: 10, volume: 1 },
+        7: { index: 7, time: 7, open: 10, high: 11, low: 9, close: 10, volume: 1 },
+        8: { index: 8, time: 8, open: 10, high: 11, low: 9, close: 10, volume: 1 },
+        9: { index: 9, time: 9, open: 10, high: 11, low: 9, close: 10, volume: 1 },
+        10: { index: 10, time: 10, open: 10, high: 11, low: 9, close: 10, volume: 1 },
+      },
+      labels: Array.from({ length: 10 }, (_, i) => ({
+        id: `label-${i + 1}`,
+        text: `${i + 1}`,
+        price: 12 + i,
+        x: i + 1,
+        textColor: 4289189541,
+      })),
+    });
+
+    assert.equal(result.bar_snapshots.length, 10);
+    assert.equal(result.bar_snapshots_recent.length, 8);
+  });
+
+  it('keeps buy recognition intact for labels below the bar', () => {
+    const result = analyzeDemarkGraphics({
+      studyName: 'DeMARK 9-13',
+      lastIndex: 30,
+      barLookup: {
+        30: { index: 30, time: 30, open: 100, high: 110, low: 90, close: 95, volume: 1000 },
+      },
+      labels: [
+        {
+          id: 'buy-setup',
+          text: '• 6',
+          price: 88,
+          x: 30,
+          textColor: 4281898556,
+        },
+      ],
+    });
+
+    assert.equal(result.current_labels[0].direction, 'buy');
+    assert.equal(result.current_labels[0].count_type, 'setup');
+    assert.equal(result.current_labels[0].is_perfect_setup, true);
+    assert.equal(result.current_labels[0].x, 30);
+  });
+
+  it('selects the bar closest to the visible range center', () => {
+    const selected = selectBarSnapshotByVisibleRange([
+      { bar_index: 10, time: { raw: 100 } },
+      { bar_index: 11, time: { raw: 140 } },
+      { bar_index: 12, time: { raw: 170 } },
+    ], { from: 120, to: 180 });
+
+    assert.equal(selected.bar_index, 11);
+  });
+
+  it('builds a resolved snapshot from the selected bar and keeps the same bar index in x', () => {
+    const demark = analyzeDemarkGraphics({
+      studyName: 'DeMARK 9-13',
+      lastIndex: 40,
+      barLookup: {
+        39: { index: 39, time: 1000, open: 100, high: 110, low: 90, close: 105, volume: 10 },
+        40: { index: 40, time: 1060, open: 105, high: 112, low: 96, close: 108, volume: 11 },
+      },
+      labels: [
+        { id: 'bar-39', text: '5', price: 111, x: 39, textColor: 4289050279 },
+        { id: 'bar-40', text: '• 6', price: 113, x: 40, textColor: 4281898556 },
+      ],
+    });
+
+    const resolved = buildResolvedDemarkSnapshot(demark, { from: 1030, to: 1090 }, { selection: 'visible' });
+    assert.equal(resolved.bar_index, 40);
+    assert.equal(resolved.x, 40);
+    assert.equal(resolved.time.raw, 1060);
+    assert.equal(resolved.labels[0].x, 40);
+    assert.equal(resolved.labels[0].bar_index, 40);
+    assert.equal(resolved.labels[0].direction, 'sell');
+  });
+
+  it('prefers the latest bar by default and can select a bar by time', () => {
+    const demark = analyzeDemarkGraphics({
+      studyName: 'DeMARK 9-13',
+      lastIndex: 50,
+      barLookup: {
+        49: { index: 49, time: 1000, open: 100, high: 110, low: 90, close: 105, volume: 10 },
+        50: { index: 50, time: 1060, open: 105, high: 112, low: 96, close: 108, volume: 11 },
+      },
+      labels: [
+        { id: 'bar-49', text: '7', price: 111, x: 49, textColor: 4281898556 },
+        { id: 'bar-50', text: '8', price: 113, x: 50, textColor: 4281898556 },
+      ],
+    });
+
+    const latest = buildResolvedDemarkSnapshot(demark, null);
+    const byTime = buildResolvedDemarkSnapshot(demark, null, { selection: { mode: 'time', value: 1000 } });
+
+    assert.equal(latest.bar_index, 50);
+    assert.equal(latest.x, 50);
+    assert.equal(byTime.bar_index, 49);
+    assert.equal(byTime.x, 49);
+    assert.equal(byTime.selection_mode, 'time');
   });
 });
