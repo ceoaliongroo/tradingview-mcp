@@ -1,0 +1,42 @@
+//@version=6
+indicator(title="DeMARK Snapshot Debug", shorttitle="DMK.dbg", overlay=true, scale=scale.none, max_labels_count=1, max_lines_count=1)
+
+groupSnapshot = "Snapshot"
+targetMode = input.string("time", "Match mode", options=["time", "bar_index", "both"], group=groupSnapshot)
+targetTime = input.time(1776095640000, "Target time (Asia/Jerusalem)", group=groupSnapshot)
+targetBarIndex = input.int(352, "Target bar_index", minval=0, group=groupSnapshot)
+plotDisplay = display.pane + display.data_window
+
+isMatchTime = time == targetTime
+isMatchBar = bar_index == targetBarIndex
+isMatch = targetMode == "time" ? isMatchTime : targetMode == "bar_index" ? isMatchBar : isMatchTime and isMatchBar
+
+plot(bar_index, title="debug_bar_index", display=plotDisplay, color=color.new(color.white, 100))
+plot(time, title="debug_time_open_ms", display=plotDisplay, color=color.new(color.white, 100))
+plot(time_close, title="debug_time_close_ms", display=plotDisplay, color=color.new(color.white, 100))
+plot(time / 1000.0, title="debug_time_open_s", display=plotDisplay, color=color.new(color.white, 100))
+plot(time_close / 1000.0, title="debug_time_close_s", display=plotDisplay, color=color.new(color.white, 100))
+plot(hour(time, "Asia/Jerusalem"), title="debug_hour_open_jerusalem", display=plotDisplay)
+plot(minute(time, "Asia/Jerusalem"), title="debug_minute_open_jerusalem", display=plotDisplay)
+plot(hour(time_close, "Asia/Jerusalem"), title="debug_hour_close_jerusalem", display=plotDisplay)
+plot(minute(time_close, "Asia/Jerusalem"), title="debug_minute_close_jerusalem", display=plotDisplay)
+plot(targetTime, title="debug_target_time_ms", display=plotDisplay)
+plot(targetBarIndex, title="debug_target_bar_index", display=plotDisplay)
+plot(isMatchTime ? 1 : 0, title="debug_match_time", display=plotDisplay)
+plot(isMatchBar ? 1 : 0, title="debug_match_bar_index", display=plotDisplay)
+plot(isMatch ? 1 : 0, title="debug_match_final", display=plotDisplay)
+
+var table dbg = table.new(position.top_right, 2, 6, border_width=1)
+if barstate.islast
+    table.cell(dbg, 0, 0, "Current UTC")
+    table.cell(dbg, 1, 0, str.format_time(time, "yyyy-MM-dd HH:mm", "UTC"))
+    table.cell(dbg, 0, 1, "Current Israel")
+    table.cell(dbg, 1, 1, str.format_time(time, "yyyy-MM-dd HH:mm", "Asia/Jerusalem"))
+    table.cell(dbg, 0, 2, "Target UTC")
+    table.cell(dbg, 1, 2, str.format_time(targetTime, "yyyy-MM-dd HH:mm", "UTC"))
+    table.cell(dbg, 0, 3, "Target Israel")
+    table.cell(dbg, 1, 3, str.format_time(targetTime, "yyyy-MM-dd HH:mm", "Asia/Jerusalem"))
+    table.cell(dbg, 0, 4, "Match")
+    table.cell(dbg, 1, 4, isMatch ? "YES" : "NO")
+    table.cell(dbg, 0, 5, "Bar index")
+    table.cell(dbg, 1, 5, str.tostring(bar_index))
