@@ -226,9 +226,8 @@ function resolveDemarkCountType(label, groupHasSetupMarker) {
 
   if (family === 'tdst') {
     if (label?.is_perfect_setup) return 'setup';
-    if (groupHasSetupMarker && label?.count_value === 1) return 'sequential';
-    if (groupHasSetupMarker && label?.count_value === 9) return 'combo';
-    if (groupHasSetupMarker && label?.count_value != null) return 'combo';
+    if (label?.count_value === 1) return 'sequential';
+    if (label?.count_value != null) return 'combo';
     return 'unknown';
   }
 
@@ -412,9 +411,10 @@ export function buildResolvedDemarkSnapshot(demark, visibleRange, { selection = 
         volume: currentBar.volume ?? null,
       }
     : null;
+  const clusterRadius = 8;
   const currentBarCluster = Number.isFinite(currentBarIndex)
     ? barSnapshots
-        .filter(bar => Number.isFinite(bar?.bar_index) && Math.abs(bar.bar_index - currentBarIndex) <= 1)
+        .filter(bar => Number.isFinite(bar?.bar_index) && Math.abs(bar.bar_index - currentBarIndex) <= clusterRadius)
         .sort((a, b) => a.bar_index - b.bar_index)
     : [];
   const currentBarClusterLabels = dedupeLabelsByIdentity(
@@ -473,6 +473,7 @@ export function buildResolvedDemarkSnapshot(demark, visibleRange, { selection = 
       marker_type: label.marker_type ?? null,
     })),
     cluster_summary: summarizeClusterLabels(currentBarClusterLabels),
+    cluster_radius: clusterRadius,
     visible_range: visibleRange && !visibleRange.error ? visibleRange : null,
     current_bar_index: currentBarIndex,
     selection_mode: normalizeSelection(selection).mode,

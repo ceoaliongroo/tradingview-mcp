@@ -313,4 +313,42 @@ describe('normalizeStudyInputs', () => {
     assert.equal(resolved.cluster_labels[0].text, '2');
     assert.equal(resolved.cluster_labels[1].text, '2');
   });
+
+  it('extends the historical cluster enough to include nearby follow-through bars', () => {
+    const demark = analyzeDemarkGraphics({
+      studyName: 'DeMARK 9-13',
+      lastIndex: 70,
+      barLookup: {
+        59: { index: 59, time: 1000, open: 100, high: 110, low: 90, close: 105, volume: 10 },
+        67: { index: 67, time: 1480, open: 106, high: 112, low: 96, close: 110, volume: 11 },
+      },
+      labels: [
+        { id: 'bar-59', text: '9', price: 111, x: 59, textColor: 4289189541 },
+        { id: 'bar-67', text: '1', price: 113, x: 67, textColor: 4293582464 },
+      ],
+    });
+
+    const resolved = buildResolvedDemarkSnapshot(demark, null, { selection: { mode: 'bar_index', value: 59 } });
+    assert.equal(resolved.bar_index, 59);
+    assert.equal(resolved.cluster_radius, 8);
+    assert.equal(resolved.cluster_bars.length, 2);
+    assert.equal(resolved.cluster_labels.length, 2);
+  });
+
+  it('falls back to a non-unknown count type for numeric TDST-colored labels', () => {
+    const result = analyzeDemarkGraphics({
+      studyName: 'DeMARK 9-13',
+      lastIndex: 80,
+      barLookup: {
+        80: { index: 80, time: 80, open: 100, high: 110, low: 95, close: 105, volume: 10 },
+      },
+      labels: [
+        { id: 'tdst-10', text: '10', price: 111, x: 80, textColor: 4293582464 },
+      ],
+    });
+
+    assert.equal(result.current_labels[0].marker_type, 'tdst');
+    assert.equal(result.current_labels[0].count_type, 'combo');
+    assert.equal(result.current_labels[0].resolved_count_type, 'combo');
+  });
 });
