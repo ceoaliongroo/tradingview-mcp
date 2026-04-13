@@ -224,9 +224,13 @@ function analyzeRiskHints(label, levels) {
 function resolveDemarkCountType(label, groupHasSetupMarker) {
   const family = label?.color_reference?.family || 'unknown';
 
+  if (family === 'setup') return 'setup';
+  if (family === 'sequential') return 'sequential';
+  if (label?.count_value === 1) return 'sequential';
+  if (family === 'combo') return 'combo';
+
   if (family === 'tdst') {
     if (label?.is_perfect_setup) return 'setup';
-    if (label?.count_value === 1) return 'sequential';
     if (label?.count_value != null) return 'combo';
     return 'unknown';
   }
@@ -237,9 +241,6 @@ function resolveDemarkCountType(label, groupHasSetupMarker) {
     if (label?.count_value === 1) return 'sequential';
     if (label?.count_value === 9) return 'combo';
   }
-  if (family === 'setup') return 'setup';
-  if (family === 'sequential') return 'sequential';
-  if (family === 'combo') return 'combo';
 
   if (label?.count_value === 1) return 'sequential';
   if (label?.count_value === 9) return 'combo';
