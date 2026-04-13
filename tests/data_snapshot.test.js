@@ -143,11 +143,11 @@ describe('normalizeStudyInputs', () => {
 
     assert.equal(result.recognized, true);
     assert.equal(result.summary.counts.tdst, undefined);
-    assert.equal(result.summary.counts.setup.sell, 1);
+    assert.equal(result.summary.counts.indicator.sell, 1);
     assert.equal(result.current_labels.length, 1);
     assert.equal(result.current_labels[0].direction, 'sell');
     assert.equal(result.current_labels[0].resolved_count_type, 'indicator');
-    assert.equal(result.current_labels[0].count_type, 'setup');
+    assert.equal(result.current_labels[0].count_type, 'indicator');
     assert.equal(result.current_labels[0].is_perfect_setup, true);
     assert.equal(result.current_labels[0].is_extension, true);
     assert.equal(result.current_labels[0].is_current, true);
@@ -162,7 +162,7 @@ describe('normalizeStudyInputs', () => {
     assert.equal(result.recent_bars.length, 2);
   });
 
-  it('resolves numeric labels in a setup cluster even when the color is ambiguous', () => {
+  it('resolves numeric labels and marker labels deterministically', () => {
     const result = analyzeDemarkGraphics({
       studyName: 'DeMARK 9-13',
       lastIndex: 20,
@@ -177,10 +177,10 @@ describe('normalizeStudyInputs', () => {
     });
 
     const types = result.bar_snapshots[0].labels.map(label => label.resolved_count_type);
-    assert.deepEqual(types.sort(), ['combo', 'indicator', 'sequential']);
-    assert.equal(result.summary.counts.setup.sell, 1);
+    assert.deepEqual(types.sort(), ['indicator', 'indicator', 'sequential']);
+    assert.equal(result.summary.counts.indicator.sell, 2);
     assert.equal(result.summary.counts.sequential.sell, 1);
-    assert.equal(result.summary.counts.combo.sell, 1);
+    assert.equal(result.summary.counts.combo.sell, 0);
   });
 
   it('keeps all bar snapshots available for selection', () => {
@@ -231,7 +231,7 @@ describe('normalizeStudyInputs', () => {
     });
 
     assert.equal(result.current_labels[0].direction, 'buy');
-    assert.equal(result.current_labels[0].count_type, 'setup');
+    assert.equal(result.current_labels[0].count_type, 'indicator');
     assert.equal(result.current_labels[0].resolved_count_type, 'indicator');
     assert.equal(result.current_labels[0].is_perfect_setup, true);
     assert.equal(result.current_labels[0].x, 30);
@@ -247,7 +247,7 @@ describe('normalizeStudyInputs', () => {
     assert.equal(selected.bar_index, 11);
   });
 
-  it('builds a resolved snapshot from the selected bar and keeps the same bar index in x', () => {
+  it('builds a resolved snapshot from the selected bar and keeps only exact labels', () => {
     const demark = analyzeDemarkGraphics({
       studyName: 'DeMARK 9-13',
       lastIndex: 40,
@@ -265,9 +265,14 @@ describe('normalizeStudyInputs', () => {
     assert.equal(resolved.bar_index, 40);
     assert.equal(resolved.x, 40);
     assert.equal(resolved.time.raw, 1060);
+    assert.equal(resolved.labels.length, 1);
     assert.equal(resolved.labels[0].x, 40);
     assert.equal(resolved.labels[0].bar_index, 40);
     assert.equal(resolved.labels[0].direction, 'sell');
+    assert.equal(resolved.labels[0].resolved_count_type, 'indicator');
+    assert.equal(resolved.cluster_bars, undefined);
+    assert.equal(resolved.cluster_labels, undefined);
+    assert.equal(resolved.cluster_summary, undefined);
   });
 
   it('prefers the latest bar by default and can select a bar by time', () => {
@@ -294,7 +299,7 @@ describe('normalizeStudyInputs', () => {
     assert.equal(byTime.selection_mode, 'time');
   });
 
-  it('includes a one-bar historical cluster around the selected bar', () => {
+  it('keeps exact selection stable for a bar_index lookup', () => {
     const demark = analyzeDemarkGraphics({
       studyName: 'DeMARK 9-13',
       lastIndex: 60,
@@ -311,13 +316,10 @@ describe('normalizeStudyInputs', () => {
     const resolved = buildResolvedDemarkSnapshot(demark, null, { selection: { mode: 'time', value: 1000 } });
     assert.equal(resolved.bar_index, 59);
     assert.equal(resolved.labels.length, 1);
-    assert.equal(resolved.cluster_bars.length, 2);
-    assert.equal(resolved.cluster_labels.length, 2);
-    assert.equal(resolved.cluster_labels[0].text, '2');
-    assert.equal(resolved.cluster_labels[1].text, '2');
+    assert.equal(resolved.labels[0].text, '2');
   });
 
-  it('extends the historical cluster enough to include nearby follow-through bars', () => {
+  it('does not expose context labels by default', () => {
     const demark = analyzeDemarkGraphics({
       studyName: 'DeMARK 9-13',
       lastIndex: 70,
@@ -333,9 +335,44 @@ describe('normalizeStudyInputs', () => {
 
     const resolved = buildResolvedDemarkSnapshot(demark, null, { selection: { mode: 'bar_index', value: 59 } });
     assert.equal(resolved.bar_index, 59);
-    assert.equal(resolved.cluster_radius, 8);
-    assert.equal(resolved.cluster_bars.length, 2);
-    assert.equal(resolved.cluster_labels.length, 2);
+    assert.equal(resolved.labels.length, 1);
+    assert.equal(resolved.labels[0].resolved_count_type, 'setup');
+    assert.equal(resolved.cluster_bars, undefined);
+  });
+
+  it('fails strict exact snapshots when a label remains unresolved', () => {
+    const demark = {
+      bar_snapshots: [
+        {
+          bar_index: 5,
+          bar_number: 5,
+          time: { raw: 1000, iso: '1970-01-01T00:16:40.000Z' },
+          open: 1,
+          high: 2,
+          low: 0,
+          close: 1,
+          volume: 1,
+          labels: [
+            {
+              id: 1,
+              text: 'x',
+              count_type: 'unknown',
+              direction: 'buy',
+              price: 1,
+              bar_index: 5,
+              bar_number: 5,
+              x: 5,
+              time: { raw: 1000, iso: '1970-01-01T00:16:40.000Z' },
+            },
+          ],
+        },
+      ],
+    };
+
+    assert.throws(
+      () => buildResolvedDemarkSnapshot(demark, null, { selection: { mode: 'bar_index', value: 5 } }),
+      /Unresolved DeMARK labels/
+    );
   });
 
   it('falls back to a non-unknown count type for numeric TDST-colored labels', () => {
@@ -351,7 +388,7 @@ describe('normalizeStudyInputs', () => {
     });
 
     assert.equal(result.current_labels[0].marker_type, 'tdst');
-    assert.equal(result.current_labels[0].count_type, 'combo');
-    assert.equal(result.current_labels[0].resolved_count_type, 'combo');
+    assert.equal(result.current_labels[0].count_type, 'indicator');
+    assert.equal(result.current_labels[0].resolved_count_type, 'indicator');
   });
 });
