@@ -224,25 +224,22 @@ function analyzeRiskHints(label, levels) {
 function resolveDemarkCountType(label, groupHasSetupMarker) {
   const family = label?.color_reference?.family || 'unknown';
 
+  if (label?.is_perfect_setup || label?.is_extension) return 'indicator';
+  if (label?.count_value === 1) return 'sequential';
   if (family === 'setup') return 'setup';
   if (family === 'sequential') return 'sequential';
-  if (label?.count_value === 1) return 'sequential';
   if (family === 'combo') return 'combo';
 
   if (family === 'tdst') {
-    if (label?.is_perfect_setup) return 'setup';
     if (label?.count_value != null) return 'combo';
     return 'unknown';
   }
 
   if (label?.marker_type === 'tdst') return 'unknown';
-  if (label?.is_perfect_setup) return 'setup';
   if (groupHasSetupMarker) {
-    if (label?.count_value === 1) return 'sequential';
     if (label?.count_value === 9) return 'combo';
   }
 
-  if (label?.count_value === 1) return 'sequential';
   if (label?.count_value === 9) return 'combo';
   return 'unknown';
 }
@@ -376,8 +373,12 @@ export function buildResolvedDemarkSnapshot(demark, visibleRange, { selection = 
 
   const barSnapshots = Array.isArray(demark.bar_snapshots) ? demark.bar_snapshots : [];
   const currentBar = selectBarSnapshotBySelection(barSnapshots, visibleRange, selection) || selectLatestBarSnapshot(barSnapshots) || selectBarSnapshotByVisibleRange(barSnapshots, visibleRange);
-  const currentLabels = Array.isArray(currentBar?.labels)
-    ? currentBar.labels
+  const currentBarIndex = currentBar?.bar_index ?? demark.current_bar_index ?? null;
+  const exactBarLabels = Array.isArray(currentBar?.labels)
+    ? currentBar.labels.filter(label => currentBarIndex == null || label?.bar_index == null || label.bar_index === currentBarIndex)
+    : [];
+  const currentLabels = exactBarLabels.length > 0
+    ? exactBarLabels
     : Array.isArray(demark.current_labels)
       ? demark.current_labels
       : Array.isArray(demark.labels)
@@ -401,7 +402,6 @@ export function buildResolvedDemarkSnapshot(demark, visibleRange, { selection = 
     marker_type: label.marker_type ?? null,
   }));
 
-  const currentBarIndex = currentBar?.bar_index ?? demark.current_bar_index ?? null;
   const currentTime = currentBar?.time?.raw ?? demark.recent_bars?.[demark.recent_bars.length - 1]?.time?.raw ?? null;
   const currentOhlcv = currentBar
     ? {
@@ -603,7 +603,7 @@ export function analyzeDemarkGraphics({ labels = [], lines = [], boxes = [], bar
     for (const label of group) {
       const resolvedType = resolveDemarkCountType(label, hasSetupMarker);
       label.resolved_count_type = resolvedType;
-      if (resolvedType !== 'unknown') label.count_type = resolvedType;
+      if (resolvedType !== 'unknown' && resolvedType !== 'indicator') label.count_type = resolvedType;
     }
   }
 

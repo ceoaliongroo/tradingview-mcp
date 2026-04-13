@@ -146,6 +146,8 @@ describe('normalizeStudyInputs', () => {
     assert.equal(result.summary.counts.setup.sell, 1);
     assert.equal(result.current_labels.length, 1);
     assert.equal(result.current_labels[0].direction, 'sell');
+    assert.equal(result.current_labels[0].resolved_count_type, 'indicator');
+    assert.equal(result.current_labels[0].count_type, 'setup');
     assert.equal(result.current_labels[0].is_perfect_setup, true);
     assert.equal(result.current_labels[0].is_extension, true);
     assert.equal(result.current_labels[0].is_current, true);
@@ -175,7 +177,7 @@ describe('normalizeStudyInputs', () => {
     });
 
     const types = result.bar_snapshots[0].labels.map(label => label.resolved_count_type);
-    assert.deepEqual(types.sort(), ['combo', 'sequential', 'setup']);
+    assert.deepEqual(types.sort(), ['combo', 'indicator', 'sequential']);
     assert.equal(result.summary.counts.setup.sell, 1);
     assert.equal(result.summary.counts.sequential.sell, 1);
     assert.equal(result.summary.counts.combo.sell, 1);
@@ -230,6 +232,7 @@ describe('normalizeStudyInputs', () => {
 
     assert.equal(result.current_labels[0].direction, 'buy');
     assert.equal(result.current_labels[0].count_type, 'setup');
+    assert.equal(result.current_labels[0].resolved_count_type, 'indicator');
     assert.equal(result.current_labels[0].is_perfect_setup, true);
     assert.equal(result.current_labels[0].x, 30);
   });
