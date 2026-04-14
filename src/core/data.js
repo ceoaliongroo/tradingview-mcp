@@ -341,9 +341,9 @@ function selectBarSnapshotBySelection(barSnapshots, visibleRange, selection) {
   if (normalized.mode === 'bar_index') {
     const targetIndex = Number(normalized.value);
     if (Number.isFinite(targetIndex)) {
-      return bars.find(bar => Number(bar.bar_index) === targetIndex) || selectLatestBarSnapshot(bars);
+      return bars.find(bar => Number(bar.bar_index) === targetIndex) || null;
     }
-    return selectLatestBarSnapshot(bars);
+    return null;
   }
 
   if (normalized.mode === 'time') {
@@ -353,18 +353,9 @@ function selectBarSnapshotBySelection(barSnapshots, visibleRange, selection) {
         ? Number(normalized.value)
         : Number.isFinite(Date.parse(normalized.value)) ? Math.floor(new Date(normalized.value).getTime() / 1000) : null;
     if (Number.isFinite(targetTime)) {
-      let best = null;
-      for (const bar of bars) {
-        const timeRaw = Number(bar?.time?.raw);
-        if (!Number.isFinite(timeRaw)) continue;
-        const score = Math.abs(timeRaw - targetTime);
-        if (!best || score < best.score || (score === best.score && bar.bar_index > best.bar.bar_index)) {
-          best = { bar, score };
-        }
-      }
-      return best?.bar || selectLatestBarSnapshot(bars);
+      return bars.find(bar => Number(bar?.time?.raw) === targetTime) || null;
     }
-    return selectLatestBarSnapshot(bars);
+    return null;
   }
 
   return selectLatestBarSnapshot(bars) || selectBarSnapshotByVisibleRange(bars, visibleRange);
@@ -412,6 +403,8 @@ function summarizeClusterLabels(labels) {
 export function buildResolvedDemarkSnapshot(demark, visibleRange, { selection = { mode: 'latest', value: null }, selected_bar = null, include_context = false } = {}) {
   if (!demark) return null;
 
+  const normalizedSelection = normalizeSelection(selection);
+  const selectionMode = normalizedSelection.mode;
   const barSnapshots = Array.isArray(demark.bar_snapshots) ? demark.bar_snapshots : [];
   const selectedBarIndex = Number.isFinite(selected_bar?.bar_index)
     ? selected_bar.bar_index
@@ -420,8 +413,22 @@ export function buildResolvedDemarkSnapshot(demark, visibleRange, { selection = 
       : null;
   const labeledBar = Number.isFinite(selectedBarIndex)
     ? barSnapshots.find(bar => Number(bar?.bar_index) === Number(selectedBarIndex)) || null
-    : selectBarSnapshotBySelection(barSnapshots, visibleRange, selection) || selectLatestBarSnapshot(barSnapshots) || selectBarSnapshotByVisibleRange(barSnapshots, visibleRange);
-  const currentBar = labeledBar || selected_bar || selectLatestBarSnapshot(barSnapshots) || selectBarSnapshotByVisibleRange(barSnapshots, visibleRange);
+    : null;
+  const exactSelectionBar = selectBarSnapshotBySelection(barSnapshots, visibleRange, selection);
+  let currentBar = null;
+
+  if (selectionMode === 'latest') {
+    currentBar = selected_bar || labeledBar || selectLatestBarSnapshot(barSnapshots) || selectBarSnapshotByVisibleRange(barSnapshots, visibleRange);
+  } else if (selectionMode === 'visible') {
+    currentBar = exactSelectionBar || selected_bar || labeledBar || selectLatestBarSnapshot(barSnapshots) || selectBarSnapshotByVisibleRange(barSnapshots, visibleRange);
+  } else if (selectionMode === 'bar_index' || selectionMode === 'time') {
+    currentBar = selected_bar || labeledBar || exactSelectionBar || null;
+    if (!currentBar) {
+      throw new Error(`Unable to resolve exact DeMARK snapshot for ${selectionMode}=${String(normalizedSelection.value ?? '')}`);
+    }
+  } else {
+    currentBar = selected_bar || exactSelectionBar || labeledBar || selectLatestBarSnapshot(barSnapshots) || selectBarSnapshotByVisibleRange(barSnapshots, visibleRange);
+  }
   const currentBarIndex = currentBar?.bar_index ?? selectedBarIndex ?? demark.current_bar_index ?? null;
   const exactBarLabels = Array.isArray(currentBar?.labels)
     ? currentBar.labels.filter(label => currentBarIndex == null || label?.bar_index == null || label.bar_index === currentBarIndex)
@@ -1215,25 +1222,32 @@ export async function getIndicatorSnapshot({ entity_id, compact = false, selecti
         return Math.floor(parsed / 1000);
       }
 
+      function resolveExactBarByTime(targetTime) {
+        if (!isFinite(targetTime) || firstIndex == null || lastIndex == null) return null;
+        for (var index = firstIndex; index <= lastIndex; index++) {
+          var v = null;
+          try { v = bars.valueAt(index); } catch(e) { v = null; }
+          if (!v) continue;
+          var barTime = Number(v[0]);
+          if (!isFinite(barTime)) continue;
+          if (barTime === targetTime) return buildBarAtIndex(index);
+        }
+        return null;
+      }
+
       function resolveNearestBarByTime(targetTime) {
         if (!isFinite(targetTime) || firstIndex == null || lastIndex == null) return null;
-        var low = firstIndex;
-        var high = lastIndex;
         var best = null;
-        while (low <= high) {
-          var mid = Math.floor((low + high) / 2);
+        for (var index = firstIndex; index <= lastIndex; index++) {
           var v = null;
-          try { v = bars.valueAt(mid); } catch(e) { v = null; }
-          if (!v) break;
+          try { v = bars.valueAt(index); } catch(e) { v = null; }
+          if (!v) continue;
           var barTime = Number(v[0]);
-          if (!isFinite(barTime)) break;
+          if (!isFinite(barTime)) continue;
           var score = Math.abs(barTime - targetTime);
-          if (!best || score < best.score || (score === best.score && mid > best.index)) {
-            best = { index: mid, score: score };
+          if (!best || score < best.score || (score === best.score && index > best.index)) {
+            best = { index: index, score: score };
           }
-          if (barTime === targetTime) break;
-          if (barTime < targetTime) low = mid + 1;
-          else high = mid - 1;
         }
         return best ? buildBarAtIndex(best.index) : null;
       }
@@ -1243,7 +1257,7 @@ export async function getIndicatorSnapshot({ entity_id, compact = false, selecti
         if (selectionMode === 'latest') return buildBarAtIndex(lastIndex);
         if (selectionMode === 'bar_index') {
           var targetIndex = Number(selectionValue);
-          return Number.isFinite(targetIndex) ? buildBarAtIndex(targetIndex) : buildBarAtIndex(lastIndex);
+          return Number.isFinite(targetIndex) ? buildBarAtIndex(targetIndex) : null;
         }
         if (selectionMode === 'visible') {
           if (visibleRange && visibleRange.from != null && visibleRange.to != null) {
@@ -1254,7 +1268,7 @@ export async function getIndicatorSnapshot({ entity_id, compact = false, selecti
         }
         if (selectionMode === 'time') {
           var targetTime = normalizeTargetTime(selectionValue);
-          return targetTime != null ? resolveNearestBarByTime(targetTime) : buildBarAtIndex(lastIndex);
+          return targetTime != null ? resolveExactBarByTime(targetTime) : null;
         }
         return buildBarAtIndex(lastIndex);
       }
