@@ -364,24 +364,34 @@ describe('normalizeStudyInputs', () => {
     assert.equal(resolved.time.raw, 1060);
   });
 
-  it('rejects exact time selections that are not loaded instead of picking a nearby bar', () => {
+  it('resolves exact loaded times without falling back to a nearby bar', () => {
     const demark = analyzeDemarkGraphics({
       studyName: 'DeMARK 9-13',
-      lastIndex: 50,
+      lastIndex: 404,
       barLookup: {
-        49: { index: 49, time: 1000, open: 100, high: 110, low: 90, close: 105, volume: 10 },
-        50: { index: 50, time: 1060, open: 105, high: 112, low: 96, close: 108, volume: 11 },
+        339: { index: 339, time: 1776137760, open: 74374, high: 74374, low: 74352, close: 74353, volume: 0.03753677 },
+        404: { index: 404, time: 1776141780, open: 74417, high: 74417, low: 74395, close: 74395, volume: 0.19967181 },
       },
       labels: [
-        { id: 'bar-49', text: '7', price: 111, x: 49, textColor: 4281898556 },
-        { id: 'bar-50', text: '8', price: 113, x: 50, textColor: 4281898556 },
+        { id: 'bar-339', text: '3', price: 74376, x: 339, textColor: 4281898556 },
+        { id: 'bar-404', text: '9', price: 74419, x: 404, textColor: 4281898556 },
       ],
     });
 
-    assert.throws(
-      () => buildResolvedDemarkSnapshot(demark, null, { selection: { mode: 'time', value: 999 } }),
-      /Unable to resolve exact DeMARK snapshot/
-    );
+    const resolved339 = buildResolvedDemarkSnapshot(demark, null, { selection: { mode: 'time', value: 1776137760 } });
+    const resolved404 = buildResolvedDemarkSnapshot(demark, null, { selection: { mode: 'time', value: 1776141780 } });
+
+    assert.equal(resolved339.bar_index, 339);
+    assert.equal(resolved339.time.raw, 1776137760);
+    assert.equal(resolved339.labels.length, 1);
+    assert.equal(resolved339.labels[0].bar_index, 339);
+    assert.equal(resolved339.labels[0].text, '3');
+
+    assert.equal(resolved404.bar_index, 404);
+    assert.equal(resolved404.time.raw, 1776141780);
+    assert.equal(resolved404.labels.length, 1);
+    assert.equal(resolved404.labels[0].bar_index, 404);
+    assert.equal(resolved404.labels[0].text, '9');
   });
 
   it('fails strict exact snapshots when a label remains unresolved', () => {
