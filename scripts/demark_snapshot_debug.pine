@@ -11,6 +11,9 @@ isMatchTime = time == targetTime
 isMatchBar = bar_index == targetBarIndex
 isMatch = targetMode == "time" ? isMatchTime : targetMode == "bar_index" ? isMatchBar : isMatchTime and isMatchBar
 
+bgcolor(isMatch ? color.new(color.yellow, 85) : na, title="debug_match_bg")
+plotshape(isMatch, title="debug_target_marker", style=shape.circle, location=location.abovebar, color=color.new(color.yellow, 0), size=size.tiny, text="DBG")
+
 plot(bar_index, title="debug_bar_index", display=plotDisplay, color=color.new(color.white, 100))
 plot(time, title="debug_time_open_ms", display=plotDisplay, color=color.new(color.white, 100))
 plot(time_close, title="debug_time_close_ms", display=plotDisplay, color=color.new(color.white, 100))

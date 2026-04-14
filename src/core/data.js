@@ -409,12 +409,20 @@ function summarizeClusterLabels(labels) {
   return summary;
 }
 
-export function buildResolvedDemarkSnapshot(demark, visibleRange, { selection = { mode: 'latest', value: null }, include_context = false } = {}) {
+export function buildResolvedDemarkSnapshot(demark, visibleRange, { selection = { mode: 'latest', value: null }, selected_bar = null, include_context = false } = {}) {
   if (!demark) return null;
 
   const barSnapshots = Array.isArray(demark.bar_snapshots) ? demark.bar_snapshots : [];
-  const currentBar = selectBarSnapshotBySelection(barSnapshots, visibleRange, selection) || selectLatestBarSnapshot(barSnapshots) || selectBarSnapshotByVisibleRange(barSnapshots, visibleRange);
-  const currentBarIndex = currentBar?.bar_index ?? demark.current_bar_index ?? null;
+  const selectedBarIndex = Number.isFinite(selected_bar?.bar_index)
+    ? selected_bar.bar_index
+    : Number.isFinite(selected_bar?.index)
+      ? selected_bar.index
+      : null;
+  const labeledBar = Number.isFinite(selectedBarIndex)
+    ? barSnapshots.find(bar => Number(bar?.bar_index) === Number(selectedBarIndex)) || null
+    : selectBarSnapshotBySelection(barSnapshots, visibleRange, selection) || selectLatestBarSnapshot(barSnapshots) || selectBarSnapshotByVisibleRange(barSnapshots, visibleRange);
+  const currentBar = labeledBar || selected_bar || selectLatestBarSnapshot(barSnapshots) || selectBarSnapshotByVisibleRange(barSnapshots, visibleRange);
+  const currentBarIndex = currentBar?.bar_index ?? selectedBarIndex ?? demark.current_bar_index ?? null;
   const exactBarLabels = Array.isArray(currentBar?.labels)
     ? currentBar.labels.filter(label => currentBarIndex == null || label?.bar_index == null || label.bar_index === currentBarIndex)
     : [];
@@ -497,6 +505,7 @@ export function buildResolvedDemarkSnapshot(demark, visibleRange, { selection = 
     current_bar_index: currentBarIndex,
     selection_mode: normalizeSelection(selection).mode,
     selection_value: normalizeSelection(selection).value,
+    selected_bar: selected_bar || null,
     include_context: !!include_context,
     source: 'resolved_demark_snapshot',
   };
@@ -1038,6 +1047,9 @@ export async function getIndicator({ entity_id }) {
 
 export async function getIndicatorSnapshot({ entity_id, compact = false, selection = { mode: 'latest', value: null } } = {}) {
   if (!entity_id) throw new Error('entity_id is required. Use chart_get_state to find study IDs.');
+  const normalizedSelection = normalizeSelection(selection);
+  const selectionMode = normalizedSelection.mode;
+  const selectionValue = normalizedSelection.value;
 
   const snapshot = await evaluate(`
     (function() {
@@ -1143,16 +1155,12 @@ export async function getIndicatorSnapshot({ entity_id, compact = false, selecti
       var firstIndex = null;
       var lastIndex = null;
       var visibleRange = null;
+      var selectionMode = ${safeString(selectionMode)};
+      var selectionValue = ${safeString(selectionValue)};
       try {
         if (bars && typeof bars.firstIndex === 'function' && typeof bars.lastIndex === 'function') {
           firstIndex = bars.firstIndex();
           lastIndex = bars.lastIndex();
-          var requestedIndexes = {};
-          if (typeof lastIndex === 'number') {
-            requestedIndexes[lastIndex] = true;
-            requestedIndexes[lastIndex - 1] = true;
-            requestedIndexes[lastIndex - 2] = true;
-          }
         }
       } catch(e) {}
 
@@ -1178,6 +1186,77 @@ export async function getIndicatorSnapshot({ entity_id, compact = false, selecti
           });
         } catch(e) {}
         return items;
+      }
+
+      function buildBarAtIndex(index) {
+        if (!bars || typeof bars.valueAt !== 'function') return null;
+        if (typeof index !== 'number' || !isFinite(index)) return null;
+        if (firstIndex != null && index < firstIndex) return null;
+        if (lastIndex != null && index > lastIndex) return null;
+        var v = null;
+        try { v = bars.valueAt(index); } catch(e) { v = null; }
+        if (!v) return null;
+        return { index: index, time: v[0], open: v[1], high: v[2], low: v[3], close: v[4], volume: v[5] || 0 };
+      }
+
+      function normalizeTargetTime(value) {
+        if (typeof value === 'number' && isFinite(value)) {
+          return value > 1000000000000 ? Math.floor(value / 1000) : Math.floor(value);
+        }
+        var raw = String(value != null ? value : '').trim();
+        if (!raw) return null;
+        if (/^\d+$/.test(raw)) {
+          var numeric = Number(raw);
+          if (!isFinite(numeric)) return null;
+          return numeric > 1000000000000 ? Math.floor(numeric / 1000) : Math.floor(numeric);
+        }
+        var parsed = Date.parse(raw);
+        if (!isFinite(parsed)) return null;
+        return Math.floor(parsed / 1000);
+      }
+
+      function resolveNearestBarByTime(targetTime) {
+        if (!isFinite(targetTime) || firstIndex == null || lastIndex == null) return null;
+        var low = firstIndex;
+        var high = lastIndex;
+        var best = null;
+        while (low <= high) {
+          var mid = Math.floor((low + high) / 2);
+          var v = null;
+          try { v = bars.valueAt(mid); } catch(e) { v = null; }
+          if (!v) break;
+          var barTime = Number(v[0]);
+          if (!isFinite(barTime)) break;
+          var score = Math.abs(barTime - targetTime);
+          if (!best || score < best.score || (score === best.score && mid > best.index)) {
+            best = { index: mid, score: score };
+          }
+          if (barTime === targetTime) break;
+          if (barTime < targetTime) low = mid + 1;
+          else high = mid - 1;
+        }
+        return best ? buildBarAtIndex(best.index) : null;
+      }
+
+      function resolveSelectedChartBar() {
+        if (!bars || typeof bars.valueAt !== 'function' || firstIndex == null || lastIndex == null) return null;
+        if (selectionMode === 'latest') return buildBarAtIndex(lastIndex);
+        if (selectionMode === 'bar_index') {
+          var targetIndex = Number(selectionValue);
+          return Number.isFinite(targetIndex) ? buildBarAtIndex(targetIndex) : buildBarAtIndex(lastIndex);
+        }
+        if (selectionMode === 'visible') {
+          if (visibleRange && visibleRange.from != null && visibleRange.to != null) {
+            var visibleTarget = Math.floor((Number(visibleRange.from) + Number(visibleRange.to)) / 2);
+            return resolveNearestBarByTime(visibleTarget) || buildBarAtIndex(lastIndex);
+          }
+          return buildBarAtIndex(lastIndex);
+        }
+        if (selectionMode === 'time') {
+          var targetTime = normalizeTargetTime(selectionValue);
+          return targetTime != null ? resolveNearestBarByTime(targetTime) : buildBarAtIndex(lastIndex);
+        }
+        return buildBarAtIndex(lastIndex);
       }
 
       var verboseLabels = collectVerbose('dwglabels', 'labels', function(v, id) {
@@ -1221,6 +1300,10 @@ export async function getIndicatorSnapshot({ entity_id, compact = false, selecti
 
       try {
         var requestedIndexes = typeof requestedIndexes === 'object' && requestedIndexes ? requestedIndexes : {};
+        var selectedChartBar = resolveSelectedChartBar();
+        if (selectedChartBar && typeof selectedChartBar.index === 'number' && isFinite(selectedChartBar.index)) {
+          requestedIndexes[Math.round(selectedChartBar.index)] = true;
+        }
         for (var li = 0; li < verboseLabels.length; li++) {
           var lx = verboseLabels[li].x;
           if (typeof lx === 'number' && isFinite(lx)) requestedIndexes[Math.round(lx)] = true;
@@ -1246,6 +1329,8 @@ export async function getIndicatorSnapshot({ entity_id, compact = false, selecti
         });
       } catch(e) {}
 
+      var selectedChartBar = resolveSelectedChartBar();
+
       return {
         entity_id: ${safeString(entity_id)},
         visible: typeof study.isVisible === 'function' ? study.isVisible() : null,
@@ -1262,6 +1347,7 @@ export async function getIndicatorSnapshot({ entity_id, compact = false, selecti
           lines: verboseLines,
           boxes: verboseBoxes,
         },
+        selected_bar: selectedChartBar,
         visible_range: visibleRange,
       };
     })()
@@ -1279,7 +1365,7 @@ export async function getIndicatorSnapshot({ entity_id, compact = false, selecti
     lastIndex: snapshot?.graphics?.last_index ?? null,
     studyName,
   });
-  const resolvedSnapshot = demark?.recognized ? buildResolvedDemarkSnapshot(demark, snapshot?.visible_range || null, { selection }) : null;
+  const resolvedSnapshot = demark?.recognized ? buildResolvedDemarkSnapshot(demark, snapshot?.visible_range || null, { selection, selected_bar: snapshot?.selected_bar || null }) : null;
   const fullResult = {
     success: true,
     entity_id,
@@ -1358,7 +1444,7 @@ export async function getDemarkSnapshot({ entity_id, compact = true, selection =
     };
   }
 
-  const resolvedSnapshot = snapshot?.resolved_snapshot || buildResolvedDemarkSnapshot(demark, snapshot?.visible_range || null, { selection });
+  const resolvedSnapshot = snapshot?.resolved_snapshot || buildResolvedDemarkSnapshot(demark, snapshot?.visible_range || null, { selection, selected_bar: snapshot?.selected_bar || null });
 
   return {
     success: true,

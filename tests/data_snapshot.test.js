@@ -340,6 +340,30 @@ describe('normalizeStudyInputs', () => {
     assert.equal(resolved.cluster_bars, undefined);
   });
 
+  it('keeps the selected chart bar even when it has no DeMARK label', () => {
+    const demark = analyzeDemarkGraphics({
+      studyName: 'DeMARK 9-13',
+      lastIndex: 90,
+      barLookup: {
+        89: { index: 89, time: 1000, open: 100, high: 110, low: 90, close: 105, volume: 10 },
+        90: { index: 90, time: 1060, open: 105, high: 112, low: 96, close: 108, volume: 11 },
+      },
+      labels: [
+        { id: 'bar-89', text: '4', price: 111, x: 89, textColor: 4289050279 },
+      ],
+    });
+
+    const resolved = buildResolvedDemarkSnapshot(demark, null, {
+      selection: { mode: 'latest', value: null },
+      selected_bar: { index: 90, bar_index: 90, time: { raw: 1060, iso: '1970-01-01T00:17:40.000Z' }, open: 105, high: 112, low: 96, close: 108, volume: 11 },
+    });
+
+    assert.equal(resolved.bar_index, 90);
+    assert.equal(resolved.x, 90);
+    assert.equal(resolved.labels.length, 0);
+    assert.equal(resolved.time.raw, 1060);
+  });
+
   it('fails strict exact snapshots when a label remains unresolved', () => {
     const demark = {
       bar_snapshots: [
