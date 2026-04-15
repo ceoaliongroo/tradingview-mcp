@@ -407,6 +407,36 @@ describe('normalizeStudyInputs', () => {
     assert.equal(resolved.labels[0].bar_index, 90);
   });
 
+  it('keeps only labels whose bar_index matches the exact focus bar', () => {
+    const demark = {
+      bar_snapshots: [
+        {
+          bar_index: 100,
+          bar_number: 100,
+          time: { raw: 1000, iso: '1970-01-01T00:16:40.000Z' },
+          open: 10,
+          high: 12,
+          low: 9,
+          close: 11,
+          volume: 1,
+          labels: [
+            { id: 'focus', text: '3', count_type: 'sequential', resolved_count_type: 'sequential', direction: 'buy', price: 8, bar_index: 100, bar_number: 100, x: 100, time: { raw: 1000, iso: '1970-01-01T00:16:40.000Z' } },
+            { id: 'neighbor', text: '9', count_type: 'setup', resolved_count_type: 'setup', direction: 'buy', price: 7, bar_index: 99, bar_number: 99, x: 99, time: { raw: 940, iso: '1970-01-01T00:15:40.000Z' } },
+          ],
+        },
+      ],
+    };
+
+    const resolved = buildResolvedDemarkSnapshot(demark, null, {
+      selection: { mode: 'bar_index', value: 100 },
+    });
+
+    assert.equal(resolved.bar_index, 100);
+    assert.equal(resolved.labels.length, 1);
+    assert.equal(resolved.labels[0].bar_index, 100);
+    assert.equal(resolved.labels[0].text, '3');
+  });
+
   it('resolves exact loaded times without falling back to a nearby bar', () => {
     const demark = analyzeDemarkGraphics({
       studyName: 'DeMARK 9-13',
