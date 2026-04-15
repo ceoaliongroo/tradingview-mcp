@@ -352,7 +352,85 @@ function mergeSelectedBarWithSnapshot(selectedBar, snapshotBar) {
   };
 }
 
-function selectBarSnapshotBySelection(barSnapshots, visibleRange, selection) {
+function parseNumericStudyValue(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value !== 'string') return null;
+  const cleaned = value.replace(/,/g, '').trim();
+  if (!cleaned) return null;
+  const numeric = Number(cleaned);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function normalizeEpochSeconds(value) {
+  const numeric = parseNumericStudyValue(value);
+  if (!Number.isFinite(numeric)) return null;
+  return numeric > 1000000000000 ? Math.floor(numeric / 1000) : Math.floor(numeric);
+}
+
+function resolutionToSeconds(resolution) {
+  const res = String(resolution || '').trim();
+  if (!res) return null;
+  if (res === 'D' || res === '1D') return 86400;
+  if (res === 'W' || res === '1W') return 604800;
+  if (res === 'M' || res === '1M') return 2592000;
+  const minutes = Number(res);
+  return Number.isFinite(minutes) ? minutes * 60 : null;
+}
+
+function projectChartBarIndex(reference, targetTimeRaw, resolution) {
+  const refIndex = parseNumericStudyValue(reference?.bar_index);
+  const refTimeRaw = normalizeEpochSeconds(reference?.time_raw);
+  const targetTimeSec = normalizeEpochSeconds(targetTimeRaw);
+  const secsPerBar = resolutionToSeconds(resolution);
+  if (!Number.isFinite(refIndex) || !Number.isFinite(refTimeRaw) || !Number.isFinite(targetTimeSec) || !Number.isFinite(secsPerBar) || secsPerBar <= 0) {
+    return null;
+  }
+  const deltaBars = Math.round((refTimeRaw - targetTimeSec) / secsPerBar);
+  return Math.round(refIndex - deltaBars);
+}
+
+function projectTimeFromChartIndex(reference, targetChartIndex, resolution) {
+  const refIndex = parseNumericStudyValue(reference?.bar_index);
+  const refTimeRaw = normalizeEpochSeconds(reference?.time_raw);
+  const secsPerBar = resolutionToSeconds(resolution);
+  if (!Number.isFinite(refIndex) || !Number.isFinite(refTimeRaw) || !Number.isFinite(targetChartIndex) || !Number.isFinite(secsPerBar) || secsPerBar <= 0) {
+    return null;
+  }
+  const deltaBars = Math.round(refIndex - targetChartIndex);
+  return Math.round(refTimeRaw - (deltaBars * secsPerBar));
+}
+
+function normalizeStudyValueMap(studies) {
+  const list = Array.isArray(studies) ? studies : [];
+  for (const study of list) {
+    if (!study || typeof study !== 'object') continue;
+    if (study.values && typeof study.values === 'object') return study.values;
+  }
+  return null;
+}
+
+function extractDebugChartReference(studies) {
+  const list = Array.isArray(studies) ? studies : [];
+  for (const study of list) {
+    const values = study?.values && typeof study.values === 'object' ? study.values : null;
+    if (!values) continue;
+    if (values.debug_chart_bar_index != null && values.debug_chart_time_open_ms != null) {
+      return {
+        bar_index: parseNumericStudyValue(values.debug_chart_bar_index),
+        time_raw: parseNumericStudyValue(values.debug_chart_time_open_ms),
+      };
+    }
+    if (values.debug_bar_index != null && values.debug_time_open_ms != null) {
+      return {
+        bar_index: parseNumericStudyValue(values.debug_bar_index),
+        time_raw: parseNumericStudyValue(values.debug_time_open_ms),
+      };
+    }
+  }
+  return null;
+}
+
+function selectBarSnapshotBySelection(barSnapshots, visibleRange, selection, chartReference = null, chartResolution = null) {
   const normalized = normalizeSelection(selection);
   const bars = Array.isArray(barSnapshots) ? barSnapshots.filter(bar => Number.isFinite(bar?.bar_index)) : [];
   if (bars.length === 0) return null;
@@ -364,6 +442,11 @@ function selectBarSnapshotBySelection(barSnapshots, visibleRange, selection) {
   if (normalized.mode === 'bar_index') {
     const targetIndex = Number(normalized.value);
     if (Number.isFinite(targetIndex)) {
+      const projectedTimeRaw = projectTimeFromChartIndex(chartReference, targetIndex, chartResolution);
+      if (Number.isFinite(projectedTimeRaw)) {
+        const match = bars.find(bar => Number(bar?.time?.raw) === projectedTimeRaw);
+        if (match) return match;
+      }
       return bars.find(bar => Number(bar.bar_index) === targetIndex) || null;
     }
     return null;
@@ -423,7 +506,7 @@ function summarizeClusterLabels(labels) {
   return summary;
 }
 
-export function buildResolvedDemarkSnapshot(demark, visibleRange, { selection = { mode: 'latest', value: null }, selected_bar = null, include_context = false } = {}) {
+export function buildResolvedDemarkSnapshot(demark, visibleRange, { selection = { mode: 'latest', value: null }, selected_bar = null, include_context = false, chart_reference = null, chart_resolution = null } = {}) {
   if (!demark) return null;
 
   const normalizedSelection = normalizeSelection(selection);
@@ -437,7 +520,7 @@ export function buildResolvedDemarkSnapshot(demark, visibleRange, { selection = 
   const labeledBar = Number.isFinite(selectedBarIndex)
     ? barSnapshots.find(bar => Number(bar?.bar_index) === Number(selectedBarIndex)) || null
     : null;
-  const exactSelectionBar = selectBarSnapshotBySelection(barSnapshots, visibleRange, selection);
+  const exactSelectionBar = selectBarSnapshotBySelection(barSnapshots, visibleRange, selection, chart_reference, chart_resolution);
   let currentBar = null;
 
   if (selectionMode === 'latest') {
@@ -453,6 +536,15 @@ export function buildResolvedDemarkSnapshot(demark, visibleRange, { selection = 
     currentBar = exactSelectionBar || labeledBar || selected_bar || selectLatestBarSnapshot(barSnapshots) || selectBarSnapshotByVisibleRange(barSnapshots, visibleRange);
   }
   const currentBarIndex = currentBar?.bar_index ?? selectedBarIndex ?? demark.current_bar_index ?? null;
+  const currentBarTime = extractBarTimeRaw(currentBar);
+  const displayBarIndex = selectionMode === 'bar_index'
+    ? Number.isFinite(Number(normalizedSelection.value)) ? Number(normalizedSelection.value) : null
+    : selectionMode === 'time'
+      ? projectChartBarIndex(chart_reference, currentBarTime, chart_resolution) ?? currentBarIndex
+      : chart_reference?.bar_index != null && selectionMode === 'latest'
+        ? parseNumericStudyValue(chart_reference.bar_index) ?? currentBarIndex
+        : currentBarIndex;
+  const currentDisplayBarIndex = Number.isFinite(displayBarIndex) ? displayBarIndex : currentBarIndex;
   const exactBarLabels = Array.isArray(currentBar?.labels)
     ? currentBar.labels.filter(label => currentBarIndex == null || label?.bar_index == null || label.bar_index === currentBarIndex)
     : [];
@@ -461,8 +553,8 @@ export function buildResolvedDemarkSnapshot(demark, visibleRange, { selection = 
   const labels = currentLabels.map(label => ({
     text: label.text ?? null,
     price: label.price ?? null,
-    x: label.bar_index ?? null,
-    bar_index: label.bar_index ?? null,
+    x: currentDisplayBarIndex ?? label.bar_index ?? null,
+    bar_index: currentDisplayBarIndex ?? label.bar_index ?? null,
     resolved_count_type: label.resolved_count_type || label.count_type || 'unknown',
     direction: label.direction || null,
     position: label.position || null,
@@ -517,8 +609,8 @@ export function buildResolvedDemarkSnapshot(demark, visibleRange, { selection = 
     }));
 
   return {
-    bar_index: currentBarIndex,
-    x: currentBarIndex,
+    bar_index: currentDisplayBarIndex,
+    x: currentDisplayBarIndex,
     time: currentTime != null ? {
       israel: formatBarTimeInZone(currentTime, 'Asia/Jerusalem'),
       utc: currentBar?.time?.iso || formatBarTime(currentTime)?.iso || null,
@@ -532,7 +624,7 @@ export function buildResolvedDemarkSnapshot(demark, visibleRange, { selection = 
     active_signals: activeSignals,
     risk_level_candidates: riskLevelCandidates,
     visible_range: visibleRange && !visibleRange.error ? visibleRange : null,
-    current_bar_index: currentBarIndex,
+    current_bar_index: currentDisplayBarIndex,
     selection_mode: normalizeSelection(selection).mode,
     selection_value: normalizeSelection(selection).value,
     selected_bar: selected_bar || null,
@@ -1386,6 +1478,7 @@ export async function getIndicatorSnapshot({ entity_id, compact = false, selecti
         },
         selected_bar: selectedChartBar,
         visible_range: visibleRange,
+        chart_resolution: typeof api.resolution === 'function' ? api.resolution() : null,
       };
     })()
   `);
@@ -1394,6 +1487,8 @@ export async function getIndicatorSnapshot({ entity_id, compact = false, selecti
 
   const inputs = normalizeStudyInputs(snapshot?.input_definitions || [], snapshot?.current_inputs || []);
   const studyName = snapshot?.study_meta?.description || snapshot?.study_meta?.short_description || snapshot?.study_meta?.shortDescription || null;
+  const studyValuesSnapshot = await getStudyValues().catch(() => null);
+  const chartReference = extractDebugChartReference(studyValuesSnapshot?.studies || []);
   const demark = analyzeDemarkGraphics({
     labels: snapshot?.graphics?.labels || [],
     lines: snapshot?.graphics?.lines || [],
@@ -1402,7 +1497,12 @@ export async function getIndicatorSnapshot({ entity_id, compact = false, selecti
     lastIndex: snapshot?.graphics?.last_index ?? null,
     studyName,
   });
-  const resolvedSnapshot = demark?.recognized ? buildResolvedDemarkSnapshot(demark, snapshot?.visible_range || null, { selection, selected_bar: snapshot?.selected_bar || null }) : null;
+  const resolvedSnapshot = demark?.recognized ? buildResolvedDemarkSnapshot(demark, snapshot?.visible_range || null, {
+    selection,
+    selected_bar: snapshot?.selected_bar || null,
+    chart_reference: chartReference,
+    chart_resolution: snapshot?.chart_resolution || null,
+  }) : null;
   const fullResult = {
     success: true,
     entity_id,
