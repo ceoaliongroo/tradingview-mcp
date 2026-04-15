@@ -364,6 +364,49 @@ describe('normalizeStudyInputs', () => {
     assert.equal(resolved.time.raw, 1060);
   });
 
+  it('does not borrow a recent time when an exact selected bar has no bar time', () => {
+    const demark = {
+      bar_snapshots: [
+        {
+          bar_index: 90,
+          bar_number: 90,
+          time: null,
+          open: null,
+          high: null,
+          low: null,
+          close: null,
+          volume: null,
+          labels: [
+            {
+              id: 1,
+              text: '9',
+              count_type: 'setup',
+              resolved_count_type: 'setup',
+              direction: 'buy',
+              price: 1,
+              bar_index: 90,
+              bar_number: 90,
+              x: 90,
+              time: null,
+            },
+          ],
+        },
+      ],
+      recent_bars: [
+        { time: { raw: 2000, iso: '1970-01-01T00:33:20.000Z' } },
+      ],
+    };
+
+    const resolved = buildResolvedDemarkSnapshot(demark, null, {
+      selection: { mode: 'bar_index', value: 90 },
+    });
+
+    assert.equal(resolved.bar_index, 90);
+    assert.equal(resolved.time, null);
+    assert.equal(resolved.labels.length, 1);
+    assert.equal(resolved.labels[0].bar_index, 90);
+  });
+
   it('resolves exact loaded times without falling back to a nearby bar', () => {
     const demark = analyzeDemarkGraphics({
       studyName: 'DeMARK 9-13',

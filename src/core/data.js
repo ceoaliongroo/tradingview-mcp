@@ -329,6 +329,14 @@ function normalizeSelection(selection) {
   };
 }
 
+function extractBarTimeRaw(bar) {
+  if (!bar) return null;
+  if (Number.isFinite(bar?.time?.raw)) return bar.time.raw;
+  if (Number.isFinite(bar?.time)) return bar.time;
+  if (Number.isFinite(bar?.raw)) return bar.raw;
+  return null;
+}
+
 function selectBarSnapshotBySelection(barSnapshots, visibleRange, selection) {
   const normalized = normalizeSelection(selection);
   const bars = Array.isArray(barSnapshots) ? barSnapshots.filter(bar => Number.isFinite(bar?.bar_index)) : [];
@@ -422,12 +430,12 @@ export function buildResolvedDemarkSnapshot(demark, visibleRange, { selection = 
   } else if (selectionMode === 'visible') {
     currentBar = exactSelectionBar || selected_bar || labeledBar || selectLatestBarSnapshot(barSnapshots) || selectBarSnapshotByVisibleRange(barSnapshots, visibleRange);
   } else if (selectionMode === 'bar_index' || selectionMode === 'time') {
-    currentBar = selected_bar || labeledBar || exactSelectionBar || null;
+    currentBar = exactSelectionBar || labeledBar || selected_bar || null;
     if (!currentBar) {
       throw new Error(`Unable to resolve exact DeMARK snapshot for ${selectionMode}=${String(normalizedSelection.value ?? '')}`);
     }
   } else {
-    currentBar = selected_bar || exactSelectionBar || labeledBar || selectLatestBarSnapshot(barSnapshots) || selectBarSnapshotByVisibleRange(barSnapshots, visibleRange);
+    currentBar = exactSelectionBar || labeledBar || selected_bar || selectLatestBarSnapshot(barSnapshots) || selectBarSnapshotByVisibleRange(barSnapshots, visibleRange);
   }
   const currentBarIndex = currentBar?.bar_index ?? selectedBarIndex ?? demark.current_bar_index ?? null;
   const exactBarLabels = Array.isArray(currentBar?.labels)
@@ -454,7 +462,7 @@ export function buildResolvedDemarkSnapshot(demark, visibleRange, { selection = 
 
   assertNoUnknownResolvedLabels(labels, { bar_index: currentBarIndex, selection_mode: normalizeSelection(selection).mode });
 
-  const currentTime = currentBar?.time?.raw ?? demark.recent_bars?.[demark.recent_bars.length - 1]?.time?.raw ?? null;
+  const currentTime = extractBarTimeRaw(currentBar);
   const currentOhlcv = currentBar
     ? {
         open: currentBar.open ?? null,
