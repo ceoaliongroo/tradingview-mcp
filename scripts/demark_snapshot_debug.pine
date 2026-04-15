@@ -2,14 +2,11 @@
 indicator(title="DeMARK Snapshot Debug", shorttitle="DMK.dbg", overlay=true, scale=scale.none, max_labels_count=1, max_lines_count=1)
 
 groupSnapshot = "Snapshot"
-targetMode = input.string("time", "Match mode", options=["time", "bar_index", "both"], group=groupSnapshot)
-targetTime = input.time(1776095640000, "Target time (Asia/Jerusalem)", group=groupSnapshot)
-targetBarIndex = input.int(352, "Target bar_index", minval=0, group=groupSnapshot)
+focusTime = input.time(1776095640000, "Focus time (Asia/Jerusalem)", group=groupSnapshot)
 plotDisplay = display.pane + display.data_window
 
-isMatchTime = time == targetTime
-isMatchBar = bar_index == targetBarIndex
-isMatch = targetMode == "time" ? isMatchTime : targetMode == "bar_index" ? isMatchBar : isMatchTime and isMatchBar
+isMatchTime = time == focusTime
+isMatch = isMatchTime
 
 bgcolor(isMatch ? color.new(color.yellow, 85) : na, title="debug_match_bg")
 plotshape(isMatch, title="debug_target_marker", style=shape.circle, location=location.abovebar, color=color.new(color.yellow, 0), size=size.tiny, text="DBG")
@@ -23,10 +20,8 @@ plot(hour(time, "Asia/Jerusalem"), title="debug_hour_open_jerusalem", display=pl
 plot(minute(time, "Asia/Jerusalem"), title="debug_minute_open_jerusalem", display=plotDisplay)
 plot(hour(time_close, "Asia/Jerusalem"), title="debug_hour_close_jerusalem", display=plotDisplay)
 plot(minute(time_close, "Asia/Jerusalem"), title="debug_minute_close_jerusalem", display=plotDisplay)
-plot(targetTime, title="debug_target_time_ms", display=plotDisplay)
-plot(targetBarIndex, title="debug_target_bar_index", display=plotDisplay)
+plot(focusTime, title="debug_focus_time_ms", display=plotDisplay)
 plot(isMatchTime ? 1 : 0, title="debug_match_time", display=plotDisplay)
-plot(isMatchBar ? 1 : 0, title="debug_match_bar_index", display=plotDisplay)
 plot(isMatch ? 1 : 0, title="debug_match_final", display=plotDisplay)
 
 var table dbg = table.new(position.top_right, 2, 6, border_width=1)
@@ -35,10 +30,10 @@ if barstate.islast
     table.cell(dbg, 1, 0, str.format_time(time, "yyyy-MM-dd HH:mm", "UTC"))
     table.cell(dbg, 0, 1, "Current Israel")
     table.cell(dbg, 1, 1, str.format_time(time, "yyyy-MM-dd HH:mm", "Asia/Jerusalem"))
-    table.cell(dbg, 0, 2, "Target UTC")
-    table.cell(dbg, 1, 2, str.format_time(targetTime, "yyyy-MM-dd HH:mm", "UTC"))
-    table.cell(dbg, 0, 3, "Target Israel")
-    table.cell(dbg, 1, 3, str.format_time(targetTime, "yyyy-MM-dd HH:mm", "Asia/Jerusalem"))
+    table.cell(dbg, 0, 2, "Focus UTC")
+    table.cell(dbg, 1, 2, str.format_time(focusTime, "yyyy-MM-dd HH:mm", "UTC"))
+    table.cell(dbg, 0, 3, "Focus Israel")
+    table.cell(dbg, 1, 3, str.format_time(focusTime, "yyyy-MM-dd HH:mm", "Asia/Jerusalem"))
     table.cell(dbg, 0, 4, "Match")
     table.cell(dbg, 1, 4, isMatch ? "YES" : "NO")
     table.cell(dbg, 0, 5, "Bar index")

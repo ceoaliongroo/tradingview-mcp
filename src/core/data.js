@@ -337,6 +337,21 @@ function extractBarTimeRaw(bar) {
   return null;
 }
 
+function mergeSelectedBarWithSnapshot(selectedBar, snapshotBar) {
+  if (!selectedBar && !snapshotBar) return null;
+  if (!selectedBar) return snapshotBar || null;
+  if (!snapshotBar) return selectedBar || null;
+
+  const mergedLabels = Array.isArray(snapshotBar?.labels) ? snapshotBar.labels : Array.isArray(selectedBar?.labels) ? selectedBar.labels : [];
+  return {
+    ...snapshotBar,
+    ...selectedBar,
+    labels: mergedLabels,
+    perfect_setup: snapshotBar?.perfect_setup ?? selectedBar?.perfect_setup ?? false,
+    extensions: snapshotBar?.extensions ?? selectedBar?.extensions ?? 0,
+  };
+}
+
 function selectBarSnapshotBySelection(barSnapshots, visibleRange, selection) {
   const normalized = normalizeSelection(selection);
   const bars = Array.isArray(barSnapshots) ? barSnapshots.filter(bar => Number.isFinite(bar?.bar_index)) : [];
@@ -430,7 +445,7 @@ export function buildResolvedDemarkSnapshot(demark, visibleRange, { selection = 
   } else if (selectionMode === 'visible') {
     currentBar = exactSelectionBar || selected_bar || labeledBar || selectLatestBarSnapshot(barSnapshots) || selectBarSnapshotByVisibleRange(barSnapshots, visibleRange);
   } else if (selectionMode === 'bar_index' || selectionMode === 'time') {
-    currentBar = exactSelectionBar || labeledBar || selected_bar || null;
+    currentBar = mergeSelectedBarWithSnapshot(selected_bar || labeledBar || null, exactSelectionBar || null);
     if (!currentBar) {
       throw new Error(`Unable to resolve exact DeMARK snapshot for ${selectionMode}=${String(normalizedSelection.value ?? '')}`);
     }
