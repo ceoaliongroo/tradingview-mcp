@@ -3,6 +3,8 @@
  * Uses efficient poll + dedup: only emits when data changes.
  */
 import { evaluate } from '../connection.js';
+import { getState as getChartState } from './chart.js';
+import { getDemarkSnapshot } from './data.js';
 
 const CHART_API = 'window.TradingViewApi._activeChartWidgetWV.value()';
 const MODEL = `${CHART_API}._chartWidget.model()`;
@@ -56,6 +58,174 @@ async function pollLoop(fetcher, { interval = 500, dedupe = true, label = 'strea
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function useAnsi() {
+  return !!process.stdout.isTTY && process.env.NO_COLOR !== '1';
+}
+
+const ANSI = {
+  reset: '\x1b[0m',
+  bold: '\x1b[1m',
+  dim: '\x1b[2m',
+  green: '\x1b[32m',
+  red: '\x1b[31m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+  cyan: '\x1b[36m',
+  brightGreen: '\x1b[92m',
+  brightRed: '\x1b[91m',
+  brightYellow: '\x1b[93m',
+  brightBlue: '\x1b[94m',
+  brightCyan: '\x1b[96m',
+};
+
+function paint(text, code) {
+  if (!useAnsi() || !code) return String(text ?? '');
+  return `${code}${text}${ANSI.reset}`;
+}
+
+function typeColor(type, direction) {
+  if (type === 'setup') return direction === 'sell' ? ANSI.brightGreen : ANSI.green;
+  if (type === 'sequential') return direction === 'sell' ? ANSI.brightRed : ANSI.red;
+  if (type === 'combo') return direction === 'sell' ? ANSI.brightBlue : ANSI.blue;
+  if (type === 'indicator') return ANSI.yellow;
+  return ANSI.dim;
+}
+
+function formatTimeLabel(snapshot) {
+  const time = snapshot?.time?.israel || snapshot?.time?.utc || null;
+  if (!time) return 'time=?';
+  return `time=${time}`;
+}
+
+function formatDemarkLine(snapshot) {
+  const barIndex = snapshot?.bar_index ?? snapshot?.current_bar_index ?? '?';
+  const labels = Array.isArray(snapshot?.labels) ? snapshot.labels : [];
+  const prefix = `${paint('[DMK]', ANSI.bold)} ${paint(formatTimeLabel(snapshot), ANSI.dim)} ${paint(`idx=${barIndex}`, ANSI.cyan)}`;
+
+  if (labels.length === 0) {
+    return `${prefix} ${paint('sin conteo', ANSI.dim)}`;
+  }
+
+  const chunks = labels.map(label => {
+    const type = label?.resolved_count_type || label?.count_type || 'indicator';
+    const direction = label?.direction || 'unknown';
+    const count = label?.count_value != null ? label.count_value : (label?.text ?? '').trim();
+    let piece = `${type} ${direction}`;
+    if (count !== '' && count != null) piece += ` ${count}`;
+    if (label?.is_perfect_setup) piece += ' •';
+    if (label?.is_extension) piece += ' +';
+    if (label?.is_current) piece += ' *';
+    return paint(piece, typeColor(type, direction));
+  });
+
+  return `${prefix} ${chunks.join(paint(' | ', ANSI.dim))}`;
+}
+
+async function resolveDemarkStudyId(filter = 'DeMARK 9-13') {
+  const state = await getChartState();
+  const needle = String(filter || '').toLowerCase();
+  const studies = Array.isArray(state?.studies) ? state.studies : [];
+  const match = studies.find(study => String(study?.name || '').toLowerCase().includes(needle));
+  return match?.id || null;
+}
+
+async function resolveLiveSelection(mode = 'hovered', value = null) {
+  if (mode === 'latest') return { mode: 'latest', value: null };
+  if (mode === 'visible') return { mode: 'visible', value: null };
+  if (mode === 'time') return { mode: 'time', value };
+  if (mode === 'bar_index') return { mode: 'bar_index', value };
+
+  const focus = await evaluate(`
+    (function() {
+      try {
+        var c = window.TradingViewApi._activeChartWidgetWV.value();
+        var m = c._chartWidget.model().m_model;
+        var src = m._crossHairSource || {};
+        var hover = m._lastHoveredHittestData || {};
+        var selected = m._lastSelectedHittestData || {};
+        function num(v) {
+          var n = Number(v);
+          return Number.isFinite(n) ? n : null;
+        }
+        function timeLike(v) {
+          var n = Number(v);
+          if (!Number.isFinite(n)) return null;
+          return n > 1000000000000 ? Math.floor(n / 1000) : Math.floor(n);
+        }
+        var hoverTime = timeLike(hover.time);
+        var selectedTime = timeLike(selected.time);
+        return {
+          bar_index: num(src.index) ?? num(hover.index) ?? num(selected.index),
+          time: hoverTime ?? selectedTime,
+        };
+      } catch(e) {
+        return { bar_index: null, time: null, error: e.message };
+      }
+    })()
+  `).catch(() => null);
+
+  if (focus?.time != null && Number.isFinite(Number(focus.time))) {
+    return { mode: 'time', value: Number(focus.time) };
+  }
+  return { mode: 'visible', value: null };
+}
+
+export async function streamDemark({ interval, filter, mode, value, once = false } = {}) {
+  const pollInterval = interval || 1000;
+  const studyFilter = filter || 'DeMARK 9-13';
+  let lastLine = null;
+  let running = true;
+
+  const cleanup = () => { running = false; };
+  process.on('SIGINT', cleanup);
+  process.on('SIGTERM', cleanup);
+
+  process.stderr.write(`\u26A0  tradingview-mcp  |  Unofficial tool. Not affiliated with TradingView Inc. or any AI provider.\n`);
+  process.stderr.write(`   Live DeMARK terminal watcher from your local TradingView Desktop only.\n`);
+  process.stderr.write(`   Ctrl+C to stop | interval=${pollInterval}ms | mode=${mode || 'hovered'} | filter="${studyFilter}"\n`);
+
+  while (running) {
+    try {
+      const entityId = await resolveDemarkStudyId(studyFilter);
+      if (!entityId) {
+        const line = `${paint('[DMK]', ANSI.bold)} ${paint(`study not found: ${studyFilter}`, ANSI.brightRed)}`;
+        if (line !== lastLine) {
+          lastLine = line;
+          process.stdout.write(line + '\n');
+        }
+        await sleep(pollInterval);
+        continue;
+      }
+
+      const selection = await resolveLiveSelection(mode || 'hovered', value ?? null);
+      const snapshot = await getDemarkSnapshot({ entity_id: entityId, compact: true, selection });
+      const line = formatDemarkLine(snapshot);
+
+      if (line !== lastLine) {
+        lastLine = line;
+        process.stdout.write(line + '\n');
+        if (once) break;
+      }
+    } catch (err) {
+      if (/CDP|ECONNREFUSED/i.test(err.message)) {
+        await sleep(2000);
+        continue;
+      }
+      const line = `${paint('[DMK]', ANSI.bold)} ${paint(`error: ${err.message}`, ANSI.brightRed)}`;
+      if (line !== lastLine) {
+        lastLine = line;
+        process.stdout.write(line + '\n');
+        if (once) break;
+      }
+    }
+    await sleep(pollInterval);
+  }
+
+  process.stderr.write(`[stream:demark] stopped\n`);
+  process.removeListener('SIGINT', cleanup);
+  process.removeListener('SIGTERM', cleanup);
+}
 
 // ── Stream: quote ──
 

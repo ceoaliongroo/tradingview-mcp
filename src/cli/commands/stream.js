@@ -81,5 +81,25 @@ register('stream', {
         process.exit(0);
       },
     }],
+    ['demark', {
+      description: 'Stream a compact live DeMARK snapshot as colored terminal text',
+      options: {
+        interval: { type: 'string', short: 'i', description: 'Poll interval in ms (default 1000)' },
+        filter: { type: 'string', short: 'f', description: 'Filter by study name substring (default: DeMARK 9-13)' },
+        mode: { type: 'string', short: 'm', description: 'Selection mode: hovered, visible, latest, time, bar_index' },
+        value: { type: 'string', short: 'v', description: 'Selection value for time or bar_index mode' },
+        once: { type: 'boolean', description: 'Emit a single line and exit' },
+      },
+      handler: async (opts) => {
+        await core.streamDemark({
+          interval: opts.interval ? Number(opts.interval) : undefined,
+          filter: opts.filter,
+          mode: opts.mode,
+          value: opts.value ?? null,
+          once: opts.once,
+        });
+        process.exit(0);
+      },
+    }],
   ]),
 });
