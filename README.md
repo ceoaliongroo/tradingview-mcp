@@ -148,6 +148,37 @@ tv pine analyze --file script.pine
 tv replay start --date 2025-03-01
 ```
 
+### Live DeMARK debug
+
+For bar-by-bar verification of the DeMARK 9-13 study, use the live stream
+watcher. It prints a compact, colored line for the selected bar and refreshes
+while the chart changes:
+
+```bash
+tv stream demark --once -m latest
+tv stream demark --once -m visible
+tv stream demark --once -m hovered
+tv stream demark --once -m bar_index -v 22541
+tv stream demark --once -m time -v "2026-04-15T16:00:00Z"
+tv stream demark -i 1000 -m hovered
+```
+
+Selection modes:
+
+- `latest` - the most recent loaded chart bar
+- `visible` - the bar near the visible range center
+- `hovered` - the currently hovered crosshair bar, with fallback to `visible`
+- `bar_index` - an exact chart bar index
+- `time` - an exact UTC timestamp or ISO datetime
+
+Typical output shape:
+
+```text
+[DMK] time=2026-04-15 19:00 idx=22541 setup buy 4 *
+```
+
+If a bar has no DeMARK count, the watcher prints `sin conteo`.
+
 ## Tool Families
 
 The MCP surface is grouped into the following families:

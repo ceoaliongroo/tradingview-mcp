@@ -121,6 +121,37 @@ tv pine analyze --file script.pine
 tv replay start --date 2025-03-01
 ```
 
+### Debug en vivo de DeMARK
+
+Para verificar barra por barra el estudio DeMARK 9-13, usa el stream en vivo.
+Imprime una linea compacta y con colores para la barra seleccionada mientras el
+chart cambia:
+
+```bash
+tv stream demark --once -m latest
+tv stream demark --once -m visible
+tv stream demark --once -m hovered
+tv stream demark --once -m bar_index -v 22541
+tv stream demark --once -m time -v "2026-04-15T16:00:00Z"
+tv stream demark -i 1000 -m hovered
+```
+
+Modos de seleccion:
+
+- `latest` - la barra mas reciente cargada del chart
+- `visible` - la barra cercana al centro del rango visible
+- `hovered` - la barra bajo el cursor/crosshair, con fallback a `visible`
+- `bar_index` - un indice exacto del chart
+- `time` - un timestamp UTC exacto o una fecha ISO
+
+Formato tipico:
+
+```text
+[DMK] time=2026-04-15 19:00 idx=22541 setup buy 4 *
+```
+
+Si una barra no tiene conteo DeMARK, el watcher imprime `sin conteo`.
+
 ## Arquitectura resumida
 
 ```text

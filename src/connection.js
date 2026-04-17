@@ -57,7 +57,14 @@ export async function getClient() {
     try {
       // Quick liveness check
       await client.Runtime.evaluate({ expression: '1', returnByValue: true });
-      return client;
+      const { target: bestTarget } = await findChartTarget();
+      if (bestTarget && targetInfo && bestTarget.id !== targetInfo.id) {
+        try { await client.close(); } catch {}
+        client = null;
+        targetInfo = null;
+      } else {
+        return client;
+      }
     } catch {
       client = null;
       targetInfo = null;
@@ -98,10 +105,56 @@ async function findChartTarget() {
     try {
       const resp = await fetch(`http://${host}:${CDP_PORT}/json/list`);
       const targets = await resp.json();
-      const target = targets.find(t => t.type === 'page' && /tradingview\.com\/chart/i.test(t.url))
-        || targets.find(t => t.type === 'page' && /tradingview/i.test(t.url))
-        || null;
-      if (target) return { target, host };
+      const candidates = targets.filter(t => t.type === 'page' && /tradingview/i.test(t.url));
+      if (candidates.length === 0) continue;
+
+      let best = null;
+      for (const target of candidates) {
+        let probe = null;
+        let probeClient = null;
+        try {
+          probeClient = await CDP({ host, port: CDP_PORT, target: target.id });
+          await probeClient.Runtime.enable();
+          probe = await probeClient.Runtime.evaluate({
+            expression: `(() => {
+              try {
+                var api = window.TradingViewApi && window.TradingViewApi._activeChartWidgetWV
+                  ? window.TradingViewApi._activeChartWidgetWV.value()
+                  : null;
+                var chart = api && api._chartWidget && api._chartWidget.model ? api._chartWidget.model().mainSeries().bars() : null;
+                var lastIndex = chart && typeof chart.lastIndex === 'function' ? chart.lastIndex() : null;
+                var firstIndex = chart && typeof chart.firstIndex === 'function' ? chart.firstIndex() : null;
+                return {
+                  visibility: document.visibilityState || null,
+                  hasFocus: !!document.hasFocus(),
+                  title: document.title || null,
+                  url: location.href || null,
+                  lastIndex: lastIndex,
+                  firstIndex: firstIndex,
+                };
+              } catch (e) {
+                return { error: e.message, visibility: document.visibilityState || null, hasFocus: !!document.hasFocus(), title: document.title || null, url: location.href || null };
+              }
+            })()`,
+            returnByValue: true,
+          });
+        } catch (err) {
+          lastError = err;
+        } finally {
+          try { if (probeClient) await probeClient.close(); } catch {}
+        }
+
+        const state = probe?.result?.value || probe?.value || probe || {};
+        const visible = state.visibility === 'visible' ? 100 : 0;
+        const focus = state.hasFocus ? 25 : 0;
+        const chartUrl = /\/chart\//i.test(String(target.url || '')) ? 10 : 0;
+        const hasSeries = Number.isFinite(state.lastIndex) ? 10 : 0;
+        const score = visible + focus + chartUrl + hasSeries;
+        const candidate = { target, score, state };
+        if (!best || candidate.score > best.score) best = candidate;
+      }
+
+      if (best?.target) return { target: best.target, host };
     } catch (err) {
       lastError = err;
     }
