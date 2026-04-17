@@ -1,0 +1,66 @@
+//@version=6
+indicator(title="DeMARK Snapshot Debug", shorttitle="DMK.dbg", overlay=true, scale=scale.none, max_labels_count=1, max_lines_count=1)
+
+groupSnapshot = "Snapshot"
+focusTime = input.time(1776222300000, "Focus time (Asia/Jerusalem)", group=groupSnapshot)
+showDebugTable = input.bool(false, "Show debug table", group=groupSnapshot)
+plotDisplay = display.pane + display.data_window
+
+chartOpenJerusalemYmd = year(time, "Asia/Jerusalem") * 10000 + month(time, "Asia/Jerusalem") * 100 + dayofmonth(time, "Asia/Jerusalem")
+chartCloseJerusalemYmd = year(time_close, "Asia/Jerusalem") * 10000 + month(time_close, "Asia/Jerusalem") * 100 + dayofmonth(time_close, "Asia/Jerusalem")
+chartOpenJerusalemHm = hour(time, "Asia/Jerusalem") * 100 + minute(time, "Asia/Jerusalem")
+chartCloseJerusalemHm = hour(time_close, "Asia/Jerusalem") * 100 + minute(time_close, "Asia/Jerusalem")
+focusJerusalemYmd = year(focusTime, "Asia/Jerusalem") * 10000 + month(focusTime, "Asia/Jerusalem") * 100 + dayofmonth(focusTime, "Asia/Jerusalem")
+focusJerusalemHm = hour(focusTime, "Asia/Jerusalem") * 100 + minute(focusTime, "Asia/Jerusalem")
+
+isMatchTime = time == focusTime
+isMatch = isMatchTime
+
+bgcolor(isMatch ? color.new(color.yellow, 85) : na, title="debug_match_bg")
+plotshape(isMatch, title="debug_focus_marker", style=shape.circle, location=location.abovebar, color=color.new(color.yellow, 0), size=size.tiny, text="DBG")
+
+plot(bar_index, title="debug_chart_bar_index", display=plotDisplay, color=color.new(color.white, 100))
+plot(time, title="debug_chart_time_open_ms", display=plotDisplay, color=color.new(color.white, 100))
+plot(time_close, title="debug_chart_time_close_ms", display=plotDisplay, color=color.new(color.white, 100))
+plot(time / 1000.0, title="debug_chart_time_open_s", display=plotDisplay, color=color.new(color.white, 100))
+plot(time_close / 1000.0, title="debug_chart_time_close_s", display=plotDisplay, color=color.new(color.white, 100))
+plot(chartOpenJerusalemYmd, title="debug_chart_date_open_jerusalem_yyyymmdd", display=plotDisplay, color=color.new(color.white, 100))
+plot(chartCloseJerusalemYmd, title="debug_chart_date_close_jerusalem_yyyymmdd", display=plotDisplay, color=color.new(color.white, 100))
+plot(chartOpenJerusalemHm, title="debug_chart_time_open_jerusalem_hhmm", display=plotDisplay, color=color.new(color.white, 100))
+plot(chartCloseJerusalemHm, title="debug_chart_time_close_jerusalem_hhmm", display=plotDisplay, color=color.new(color.white, 100))
+plot(hour(time, "Asia/Jerusalem"), title="debug_chart_hour_open_jerusalem", display=plotDisplay)
+plot(minute(time, "Asia/Jerusalem"), title="debug_chart_minute_open_jerusalem", display=plotDisplay)
+plot(hour(time_close, "Asia/Jerusalem"), title="debug_chart_hour_close_jerusalem", display=plotDisplay)
+plot(minute(time_close, "Asia/Jerusalem"), title="debug_chart_minute_close_jerusalem", display=plotDisplay)
+plot(focusTime, title="debug_focus_time_ms", display=plotDisplay)
+plot(focusJerusalemYmd, title="debug_focus_date_jerusalem_yyyymmdd", display=plotDisplay, color=color.new(color.white, 100))
+plot(focusJerusalemHm, title="debug_focus_time_jerusalem_hhmm", display=plotDisplay, color=color.new(color.white, 100))
+plot(isMatchTime ? 1 : 0, title="debug_focus_match_time", display=plotDisplay)
+plot(isMatch ? 1 : 0, title="debug_focus_match_final", display=plotDisplay)
+
+var table dbg = table.new(position.top_right, 2, 11, border_width=1)
+if barstate.islast and showDebugTable
+    table.cell(dbg, 0, 0, "Chart UTC open")
+    table.cell(dbg, 1, 0, str.format_time(time, "yyyy-MM-dd HH:mm", "UTC"))
+    table.cell(dbg, 0, 1, "Chart Israel open")
+    table.cell(dbg, 1, 1, str.format_time(time, "yyyy-MM-dd HH:mm", "Asia/Jerusalem"))
+    table.cell(dbg, 0, 2, "Chart Israel date")
+    table.cell(dbg, 1, 2, str.format("{0}-{1,number,00}-{2,number,00}", year(time, "Asia/Jerusalem"), month(time, "Asia/Jerusalem"), dayofmonth(time, "Asia/Jerusalem")))
+    table.cell(dbg, 0, 3, "Chart UTC close")
+    table.cell(dbg, 1, 3, str.format_time(time_close, "yyyy-MM-dd HH:mm", "UTC"))
+    table.cell(dbg, 0, 4, "Chart Israel close")
+    table.cell(dbg, 1, 4, str.format_time(time_close, "yyyy-MM-dd HH:mm", "Asia/Jerusalem"))
+    table.cell(dbg, 0, 5, "Chart Israel close date")
+    table.cell(dbg, 1, 5, str.format("{0}-{1,number,00}-{2,number,00}", year(time_close, "Asia/Jerusalem"), month(time_close, "Asia/Jerusalem"), dayofmonth(time_close, "Asia/Jerusalem")))
+    table.cell(dbg, 0, 6, "Focus UTC")
+    table.cell(dbg, 1, 6, str.format_time(focusTime, "yyyy-MM-dd HH:mm", "UTC"))
+    table.cell(dbg, 0, 7, "Focus Israel")
+    table.cell(dbg, 1, 7, str.format_time(focusTime, "yyyy-MM-dd HH:mm", "Asia/Jerusalem"))
+    table.cell(dbg, 0, 8, "Focus Israel date")
+    table.cell(dbg, 1, 8, str.format("{0}-{1,number,00}-{2,number,00}", year(focusTime, "Asia/Jerusalem"), month(focusTime, "Asia/Jerusalem"), dayofmonth(focusTime, "Asia/Jerusalem")))
+    table.cell(dbg, 0, 9, "Match")
+    table.cell(dbg, 1, 9, isMatch ? "YES" : "NO")
+    table.cell(dbg, 0, 10, "Chart bar_index")
+    table.cell(dbg, 1, 10, str.tostring(bar_index))
+else if barstate.islast and not showDebugTable
+    table.clear(dbg, 0, 0, 1, 10)

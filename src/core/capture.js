@@ -31,6 +31,23 @@ function findNewestDownloadedPng(sinceMs) {
   return best?.path || null;
 }
 
+async function getActiveChartMainDivBounds() {
+  return evaluate(`
+    (function() {
+      try {
+        var chart = window.TradingViewApi._activeChartWidgetWV.value();
+        var el = chart && chart._mainDiv ? chart._mainDiv : null;
+        if (!el || typeof el.getBoundingClientRect !== 'function') return null;
+        var rect = el.getBoundingClientRect();
+        if (!rect || rect.width < 120 || rect.height < 120) return null;
+        return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+      } catch (e) {
+        return null;
+      }
+    })()
+  `);
+}
+
 export async function captureScreenshot({ region, filename, method } = {}) {
   mkdirSync(SCREENSHOT_DIR, { recursive: true });
 
@@ -83,22 +100,25 @@ export async function captureScreenshot({ region, filename, method } = {}) {
   let clip = undefined;
 
   if (region === 'chart') {
-    const bounds = await evaluate(`
-      (function() {
-        var nodes = Array.prototype.slice.call(document.querySelectorAll('[data-name="pane-canvas"], canvas'));
-        var best = null;
-        for (var i = 0; i < nodes.length; i++) {
-          var node = nodes[i];
-          if (!node || typeof node.getBoundingClientRect !== 'function') continue;
-          var rect = node.getBoundingClientRect();
-          if (!rect || rect.width < 120 || rect.height < 120) continue;
-          var area = rect.width * rect.height;
-          if (!best || area > best.area) best = { rect: rect, area: area };
-        }
-        if (!best) return null;
-        return { x: best.rect.x, y: best.rect.y, width: best.rect.width, height: best.rect.height };
-      })()
-    `);
+    let bounds = await getActiveChartMainDivBounds();
+    if (!bounds) {
+      bounds = await evaluate(`
+        (function() {
+          var nodes = Array.prototype.slice.call(document.querySelectorAll('[data-name="pane-canvas"], canvas'));
+          var best = null;
+          for (var i = 0; i < nodes.length; i++) {
+            var node = nodes[i];
+            if (!node || typeof node.getBoundingClientRect !== 'function') continue;
+            var rect = node.getBoundingClientRect();
+            if (!rect || rect.width < 120 || rect.height < 120) continue;
+            var area = rect.width * rect.height;
+            if (!best || area > best.area) best = { rect: rect, area: area };
+          }
+          if (!best) return null;
+          return { x: best.rect.x, y: best.rect.y, width: best.rect.width, height: best.rect.height };
+        })()
+      `);
+    }
     if (bounds) clip = { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height, scale: 1 };
   } else if (region === 'strategy_tester') {
     const bounds = await evaluate(`

@@ -426,10 +426,28 @@ function extractBarTimeRaw(bar) {
   return null;
 }
 
-function mergeSelectedBarWithSnapshot(selectedBar, snapshotBar) {
+function barsShareIdentity(a, b) {
+  if (!a || !b) return false;
+  const indexA = Number(a?.bar_index ?? a?.index);
+  const indexB = Number(b?.bar_index ?? b?.index);
+  const timeA = extractBarTimeRaw(a);
+  const timeB = extractBarTimeRaw(b);
+  const hasIndex = Number.isFinite(indexA) && Number.isFinite(indexB);
+  const hasTime = Number.isFinite(timeA) && Number.isFinite(timeB);
+  if (hasIndex && hasTime) return indexA === indexB && timeA === timeB;
+  if (hasIndex) return indexA === indexB;
+  if (hasTime) return timeA === timeB;
+  return false;
+}
+
+function mergeSelectedBarWithSnapshot(selectedBar, snapshotBar, { preferSnapshotOnMismatch = false } = {}) {
   if (!selectedBar && !snapshotBar) return null;
   if (!selectedBar) return snapshotBar || null;
   if (!snapshotBar) return selectedBar || null;
+
+  if (!barsShareIdentity(selectedBar, snapshotBar)) {
+    return (preferSnapshotOnMismatch ? snapshotBar : selectedBar) || snapshotBar || selectedBar || null;
+  }
 
   const mergedLabels = Array.isArray(snapshotBar?.labels) ? snapshotBar.labels : Array.isArray(selectedBar?.labels) ? selectedBar.labels : [];
   return {
@@ -438,6 +456,21 @@ function mergeSelectedBarWithSnapshot(selectedBar, snapshotBar) {
     labels: mergedLabels,
     perfect_setup: snapshotBar?.perfect_setup ?? selectedBar?.perfect_setup ?? false,
     extensions: snapshotBar?.extensions ?? selectedBar?.extensions ?? 0,
+  };
+}
+
+function mergeBarDataAndLabels(dataBar, labelBar) {
+  if (!dataBar && !labelBar) return null;
+  if (!dataBar) return labelBar || null;
+  if (!labelBar) return dataBar || null;
+
+  const mergedLabels = Array.isArray(labelBar?.labels) ? labelBar.labels : Array.isArray(dataBar?.labels) ? dataBar.labels : [];
+  return {
+    ...labelBar,
+    ...dataBar,
+    labels: mergedLabels,
+    perfect_setup: labelBar?.perfect_setup ?? dataBar?.perfect_setup ?? false,
+    extensions: labelBar?.extensions ?? dataBar?.extensions ?? 0,
   };
 }
 
@@ -633,12 +666,13 @@ export function buildResolvedDemarkSnapshot(demark, visibleRange, { selection = 
   let currentBar = null;
 
   if (selectionMode === 'latest') {
-    currentBar = mergeSelectedBarWithSnapshot(
-      selected_bar || null,
-      labeledBar || baselineBar || demarkCurrentRecentBar || demarkCurrentBar || selectLatestBarSnapshot(barSnapshots) || selectBarSnapshotByVisibleRange(barSnapshots, visibleRange)
-    );
+    const latestDataBar = chart_reference
+      ? (demarkCurrentRecentBar || demarkCurrentBar || exactSelectionBar || chart_bar || selected_bar || selectBarSnapshotByVisibleRange(barSnapshots, visibleRange) || baselineBar)
+      : (selected_bar || exactSelectionBar || chart_bar || demarkCurrentRecentBar || demarkCurrentBar || selectBarSnapshotByVisibleRange(barSnapshots, visibleRange) || baselineBar);
+    const latestLabelBar = exactSelectionBar || labeledBar || selected_bar || chart_bar || baselineBar || demarkCurrentRecentBar || demarkCurrentBar;
+    currentBar = mergeBarDataAndLabels(latestDataBar || null, latestLabelBar || null);
     if (!currentBar) {
-      currentBar = labeledBar || baselineBar || demarkCurrentRecentBar || demarkCurrentBar || selected_bar || selectLatestBarSnapshot(barSnapshots) || selectBarSnapshotByVisibleRange(barSnapshots, visibleRange);
+      currentBar = latestLabelBar || latestDataBar || selected_bar || chart_bar || null;
     }
   } else if (selectionMode === 'visible') {
     currentBar = mergeSelectedBarWithSnapshot(
@@ -1614,14 +1648,11 @@ export async function getIndicatorSnapshot({ entity_id, compact = false, selecti
         return best ? buildBarAtIndex(best.index) : null;
       }
 
-      function resolveSelectedChartBar() {
-        if (!bars || typeof bars.valueAt !== 'function' || firstIndex == null || lastIndex == null) return null;
-        if (selectionMode === 'latest') {
-          if (isFinite(chartReferenceTimeRaw)) {
-            return resolveExactBarByTime(chartReferenceTimeRaw) || resolveNearestBarByTime(chartReferenceTimeRaw) || buildBarAtIndex(lastIndex);
+        function resolveSelectedChartBar() {
+          if (!bars || typeof bars.valueAt !== 'function' || firstIndex == null || lastIndex == null) return null;
+          if (selectionMode === 'latest') {
+            return buildBarAtIndex(lastIndex);
           }
-          return buildBarAtIndex(lastIndex);
-        }
         if (selectionMode === 'bar_index') {
           var targetIndex = Number(selectionValue);
           if (!Number.isFinite(targetIndex)) return null;
@@ -2193,3 +2224,5 @@ export async function getPineBoxes({ study_filter, verbose } = {}) {
   });
   return { success: true, study_count: studies.length, studies };
 }
+
+

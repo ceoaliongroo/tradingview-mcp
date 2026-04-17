@@ -355,6 +355,69 @@ describe('normalizeStudyInputs', () => {
     assert.equal(resolved.labels.some(label => label.resolved_count_type === 'combo'), true);
   });
 
+  it('keeps the selected latest bar when no chart reference is available', () => {
+    const demark = {
+      bar_snapshots: [
+        {
+          bar_index: 10,
+          bar_number: 10,
+          time: { raw: 1000, iso: '1970-01-01T00:16:40.000Z' },
+          open: 100,
+          high: 112,
+          low: 96,
+          close: 108,
+          volume: 11,
+          labels: [
+            { id: 'setup', text: '1', count_type: 'setup', resolved_count_type: 'setup', direction: 'buy', price: 95, bar_index: 10, bar_number: 10, x: 10, time: { raw: 1000, iso: '1970-01-01T00:16:40.000Z' } },
+          ],
+        },
+      ],
+    };
+
+    const resolved = buildResolvedDemarkSnapshot(demark, null, {
+      selection: { mode: 'latest', value: null },
+      selected_bar: { index: 90, bar_index: 90, time: { raw: 2000, iso: '1970-01-01T00:33:20.000Z' }, open: 1, high: 2, low: 0, close: 1, volume: 1 },
+    });
+
+    assert.equal(resolved.bar_index, 90);
+    assert.equal(resolved.time.raw, 2000);
+    assert.equal(resolved.ohlcv.open, 1);
+    assert.equal(resolved.labels.length, 0);
+  });
+
+  it('prefers the snapshot bar over a mismatched selected bar when chart reference is available', () => {
+    const demark = {
+      bar_snapshots: [
+        {
+          bar_index: 10,
+          bar_number: 10,
+          time: { raw: 1000, iso: '1970-01-01T00:16:40.000Z' },
+          open: 100,
+          high: 112,
+          low: 96,
+          close: 108,
+          volume: 11,
+          labels: [
+            { id: 'setup', text: '1', count_type: 'setup', resolved_count_type: 'setup', direction: 'buy', price: 95, bar_index: 10, bar_number: 10, x: 10, time: { raw: 1000, iso: '1970-01-01T00:16:40.000Z' } },
+          ],
+        },
+      ],
+    };
+
+    const resolved = buildResolvedDemarkSnapshot(demark, null, {
+      selection: { mode: 'latest', value: null },
+      selected_bar: { index: 90, bar_index: 90, time: { raw: 2000, iso: '1970-01-01T00:33:20.000Z' }, open: 1, high: 2, low: 0, close: 1, volume: 1 },
+      chart_reference: { bar_index: 711, time_raw: 1000 },
+    });
+
+    assert.equal(resolved.bar_index, 711);
+    assert.equal(resolved.time.raw, 1000);
+    assert.equal(resolved.ohlcv.open, 100);
+    assert.equal(resolved.labels.length, 1);
+    assert.equal(resolved.labels[0].resolved_count_type, 'setup');
+    assert.equal(resolved.labels[0].direction, 'buy');
+  });
+
   it('keeps setup and combo labels together on the same bar', () => {
     const result = analyzeDemarkGraphics({
       studyName: 'DeMARK 9-13',

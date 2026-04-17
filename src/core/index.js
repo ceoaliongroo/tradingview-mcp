@@ -16,3 +16,4 @@ export * as indicators from './indicators.js';
 export * as ui from './ui.js';
 export * as stream from './stream.js';
 export * as demarkVisual from './demark_visual.js';
+export * as demarkSweep from './demark_sweep.js';

@@ -1,0 +1,971 @@
+﻿{
+  "success": true,
+  "entity_id": "GyH0jG",
+  "visible": true,
+  "study_meta": {
+    "description": "DeMARK 9-13",
+    "shortDescription": "DeMARK 9-13",
+    "id": "Script$PUB;5c23535a88c943569b6df88751aa9c3a@tv-scripting",
+    "fullId": "Script$PUB;5c23535a88c943569b6df88751aa9c3a@tv-scripting-101",
+    "packageId": "tv-scripting",
+    "shortId": "Script$PUB;5c23535a88c943569b6df88751aa9c3a",
+    "scriptIdPart": "PUB;5c23535a88c943569b6df88751aa9c3a",
+    "version": 101,
+    "pine": {
+      "digest": "7050dba4987dd8024d18b5006d3a373945ade2b1",
+      "version": "1.0"
+    },
+    "productId": "tv-scripting",
+    "is_price_study": true,
+    "is_hidden_study": false,
+    "isTVScript": true,
+    "useVersionFromMetaInfo": false
+  },
+  "input_count": 46,
+  "inputs": [
+    {
+      "id": "text",
+      "name": "ILScript",
+      "localized_name": "ILScript",
+      "group": null,
+      "type": "text",
+      "display": 15,
+      "active": null,
+      "is_fake": false,
+      "hidden": true,
+      "default_value": {
+        "preview": "bmI9Ks46_0EOTxd0lfP03CS2BWjAxpA==_ftYzTcHAFmfPn0Q3wjOh1KEOMuYHWVkHIqC9BjE82dH4eevnoqMAsR4VIyRjoptSNvLK1ySDHicT4uoBiXxgn6Ctk0KA9eR3KQc2ABDO3lR/IGun2eX76KQQK6fLmrsi+FaGtQzR0WNfT0X+aLJGGf7cicL949JrooqfbaRTgAefFrRSc9jXiz77JVCzW2EQNzv4AB2HZ+UhQu",
+        "length": 149230,
+        "truncated": true
+      },
+      "value": {
+        "preview": "bmI9Ks46_0EOTxd0lfP03CS2BWjAxpA==_ftYzTcHAFmfPn0Q3wjOh1KEOMuYHWVkHIqC9BjE82dH4eevnoqMAsR4VIyRjoptSNvLK1ySDHicT4uoBiXxgn6Ctk0KA9eR3KQc2ABDO3lR/IGun2eX76KQQK6fLmrsi+FaGtQzR0WNfT0X+aLJGGf7cicL949JrooqfbaRTgAefFrRSc9jXiz77JVCzW2EQNzv4AB2HZ+UhQu",
+        "length": 149230,
+        "truncated": true
+      }
+    },
+    {
+      "id": "pineId",
+      "name": "pineId",
+      "localized_name": "pineId",
+      "group": null,
+      "type": "text",
+      "display": 15,
+      "active": null,
+      "is_fake": false,
+      "hidden": true,
+      "default_value": "",
+      "value": "PUB;5c23535a88c943569b6df88751aa9c3a"
+    },
+    {
+      "id": "pineVersion",
+      "name": "pineVersion",
+      "localized_name": "pineVersion",
+      "group": null,
+      "type": "text",
+      "display": 15,
+      "active": null,
+      "is_fake": false,
+      "hidden": true,
+      "default_value": "",
+      "value": "1.0"
+    },
+    {
+      "id": "pineFeatures",
+      "name": "pineFeatures",
+      "localized_name": "pineFeatures",
+      "group": null,
+      "type": "text",
+      "display": 15,
+      "active": null,
+      "is_fake": true,
+      "hidden": true,
+      "default_value": "{\"indicator\":1,\"str\":1,\"array\":1,\"ta\":1,\"math\":1,\"line\":1,\"box\":1,\"label\":1,\"map\":1,\"type\":1,\"builtin_methods\":1}",
+      "value": "{\"indicator\":1,\"str\":1,\"array\":1,\"ta\":1,\"math\":1,\"line\":1,\"box\":1,\"label\":1,\"map\":1,\"type\":1,\"builtin_methods\":1}"
+    },
+    {
+      "id": "in_0",
+      "name": "Setup",
+      "localized_name": "Setup",
+      "group": null,
+      "type": "bool",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "inline": "a",
+      "default_value": true,
+      "value": true
+    },
+    {
+      "id": "in_1",
+      "name": "",
+      "localized_name": "",
+      "group": null,
+      "type": "color",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "inline": "a",
+      "default_value": "rgba(48,121,245,1)",
+      "value": 4282158648
+    },
+    {
+      "id": "in_2",
+      "name": "",
+      "localized_name": "",
+      "group": null,
+      "type": "color",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "inline": "a",
+      "default_value": "rgba(48,121,245,1)",
+      "value": 4289189541
+    },
+    {
+      "id": "in_3",
+      "name": "TD Setup Trend (TDST)",
+      "localized_name": "TD Setup Trend (TDST)",
+      "group": null,
+      "type": "bool",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "inline": "b",
+      "default_value": true,
+      "value": true
+    },
+    {
+      "id": "in_4",
+      "name": "",
+      "localized_name": "",
+      "group": null,
+      "type": "color",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "inline": "b",
+      "default_value": "rgba(120,190,255,1)",
+      "value": 4278222069
+    },
+    {
+      "id": "in_5",
+      "name": "",
+      "localized_name": "",
+      "group": null,
+      "type": "color",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "inline": "b",
+      "default_value": "rgba(120,190,255,1)",
+      "value": 4286631167
+    },
+    {
+      "id": "in_6",
+      "name": "Sequential Countdown",
+      "localized_name": "Sequential Countdown",
+      "group": null,
+      "type": "bool",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "inline": "c",
+      "default_value": true,
+      "value": true
+    },
+    {
+      "id": "in_7",
+      "name": "",
+      "localized_name": "",
+      "group": null,
+      "type": "color",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "inline": "c",
+      "default_value": "rgba(10,179,147,1)",
+      "value": 4281542834
+    },
+    {
+      "id": "in_8",
+      "name": "",
+      "localized_name": "",
+      "group": null,
+      "type": "color",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "inline": "c",
+      "default_value": "rgba(255,41,58,1)",
+      "value": 4288979450
+    },
+    {
+      "id": "in_9",
+      "name": "Combo Countdown",
+      "localized_name": "Combo Countdown",
+      "group": null,
+      "type": "bool",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "inline": "d",
+      "default_value": true,
+      "value": true
+    },
+    {
+      "id": "in_10",
+      "name": "",
+      "localized_name": "",
+      "group": null,
+      "type": "color",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "inline": "d",
+      "default_value": "rgba(50,224,18,1)",
+      "value": 4289173248
+    },
+    {
+      "id": "in_11",
+      "name": "",
+      "localized_name": "",
+      "group": null,
+      "type": "color",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "inline": "d",
+      "default_value": "rgba(216,0,255,1)",
+      "value": 4293582464
+    },
+    {
+      "id": "in_12",
+      "name": "Indicator font size",
+      "localized_name": "Indicator font size",
+      "group": null,
+      "type": "integer",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "min": 6,
+      "max": 72,
+      "default_value": 18,
+      "value": 18
+    },
+    {
+      "id": "in_13",
+      "name": "Display full series count",
+      "localized_name": "Display full series count",
+      "group": null,
+      "type": "text",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "options": [
+        "Active only",
+        "All"
+      ],
+      "default_value": "Active only",
+      "value": "Active only"
+    },
+    {
+      "id": "in_14",
+      "name": "Bars to Setup",
+      "localized_name": "Bars to Setup",
+      "group": "Setup",
+      "type": "integer",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "min": 1,
+      "max": 100,
+      "step": 1,
+      "default_value": 9,
+      "value": 9
+    },
+    {
+      "id": "in_15",
+      "name": "Bars to look back",
+      "localized_name": "Bars to look back",
+      "group": "Setup",
+      "type": "integer",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "min": 1,
+      "max": 100,
+      "step": 1,
+      "default_value": 4,
+      "value": 4
+    },
+    {
+      "id": "in_16",
+      "name": "Setup compare",
+      "localized_name": "Setup compare",
+      "group": "Setup",
+      "type": "text",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "options": [
+        "With equal",
+        "Without equal"
+      ],
+      "default_value": "Without equal",
+      "value": "Without equal"
+    },
+    {
+      "id": "in_17",
+      "name": "Count completion weight",
+      "localized_name": "Count completion weight",
+      "group": "Setup",
+      "type": "text",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "options": [
+        "Normal",
+        "Bold"
+      ],
+      "default_value": "Bold",
+      "value": "Bold"
+    },
+    {
+      "id": "in_18",
+      "name": "Setup Perfection",
+      "localized_name": "Setup Perfection",
+      "group": "Setup",
+      "type": "bool",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "default_value": true,
+      "value": true
+    },
+    {
+      "id": "in_19",
+      "name": "Enable Risk Level",
+      "localized_name": "Enable Risk Level",
+      "group": "Setup",
+      "type": "bool",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "default_value": true,
+      "value": true
+    },
+    {
+      "id": "in_20",
+      "name": "Enable Risk Level zone",
+      "localized_name": "Enable Risk Level zone",
+      "group": "Setup",
+      "type": "bool",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "default_value": true,
+      "value": true
+    },
+    {
+      "id": "in_21",
+      "name": "TDST line thickness",
+      "localized_name": "TDST line thickness",
+      "group": "TD Setup Trend (TDST)",
+      "type": "text",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "options": [
+        "Fine",
+        "Thin",
+        "Normal",
+        "Bold",
+        "Thick"
+      ],
+      "default_value": "Thin",
+      "value": "Thin"
+    },
+    {
+      "id": "in_22",
+      "name": "Bars to Countdown",
+      "localized_name": "Bars to Countdown",
+      "group": "Countdown (SHARED)",
+      "type": "integer",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "min": 1,
+      "max": 100,
+      "step": 1,
+      "default_value": 13,
+      "value": 13
+    },
+    {
+      "id": "in_23",
+      "name": "Bars to look back",
+      "localized_name": "Bars to look back",
+      "group": "Countdown (SHARED)",
+      "type": "integer",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "min": 1,
+      "max": 100,
+      "step": 1,
+      "default_value": 2,
+      "value": 2
+    },
+    {
+      "id": "in_24",
+      "name": "Countdown comparison value",
+      "localized_name": "Countdown comparison value",
+      "group": "Countdown (SHARED)",
+      "type": "text",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "options": [
+        "Close",
+        "Low High"
+      ],
+      "default_value": "Close",
+      "value": "Close"
+    },
+    {
+      "id": "in_25",
+      "name": "Termination Count price value",
+      "localized_name": "Termination Count price value",
+      "group": "Countdown (SHARED)",
+      "type": "text",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "options": [
+        "Open or Close",
+        "Close",
+        "Low | High"
+      ],
+      "default_value": "Open or Close",
+      "value": "Open or Close"
+    },
+    {
+      "id": "in_26",
+      "name": "Countdown compare",
+      "localized_name": "Countdown compare",
+      "group": "Countdown (SHARED)",
+      "type": "text",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "options": [
+        "With equal",
+        "Without equal"
+      ],
+      "default_value": "With equal",
+      "value": "With equal"
+    },
+    {
+      "id": "in_27",
+      "name": "Count completion weight",
+      "localized_name": "Count completion weight",
+      "group": "Countdown (SHARED)",
+      "type": "text",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "options": [
+        "Normal",
+        "Bold"
+      ],
+      "default_value": "Bold",
+      "value": "Bold"
+    },
+    {
+      "id": "in_28",
+      "name": "Enable Intersection",
+      "localized_name": "Enable Intersection",
+      "group": "Sequential Countdown",
+      "type": "bool",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "default_value": false,
+      "value": false
+    },
+    {
+      "id": "in_29",
+      "name": "8 vs 5 qualifier",
+      "localized_name": "8 vs 5 qualifier",
+      "group": "Sequential Countdown",
+      "type": "bool",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "default_value": false,
+      "value": false
+    },
+    {
+      "id": "in_30",
+      "name": "Last vs 8 qualifier",
+      "localized_name": "Last vs 8 qualifier",
+      "group": "Sequential Countdown",
+      "type": "bool",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "default_value": true,
+      "value": true
+    },
+    {
+      "id": "in_31",
+      "name": "Enable Risk Level",
+      "localized_name": "Enable Risk Level",
+      "group": "Sequential Countdown",
+      "type": "bool",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "default_value": true,
+      "value": true
+    },
+    {
+      "id": "in_32",
+      "name": "Enable Risk Level zone",
+      "localized_name": "Enable Risk Level zone",
+      "group": "Sequential Countdown",
+      "type": "bool",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "default_value": true,
+      "value": true
+    },
+    {
+      "id": "in_33",
+      "name": "Combo version",
+      "localized_name": "Combo version",
+      "group": "Combo Countdown",
+      "type": "text",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "options": [
+        "Standard",
+        "Aggressive",
+        "Conservative"
+      ],
+      "default_value": "Standard",
+      "value": "Standard"
+    },
+    {
+      "id": "in_34",
+      "name": "Enable Risk Level",
+      "localized_name": "Enable Risk Level",
+      "group": "Combo Countdown",
+      "type": "bool",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "default_value": true,
+      "value": true
+    },
+    {
+      "id": "in_35",
+      "name": "Enable Risk Level zone",
+      "localized_name": "Enable Risk Level zone",
+      "group": "Combo Countdown",
+      "type": "bool",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "default_value": true,
+      "value": true
+    },
+    {
+      "id": "in_36",
+      "name": "Enable Recycle",
+      "localized_name": "Enable Recycle",
+      "group": "Recycle",
+      "type": "bool",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "default_value": true,
+      "value": true
+    },
+    {
+      "id": "in_37",
+      "name": "Setup count",
+      "localized_name": "Setup count",
+      "group": "Recycle",
+      "type": "integer",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "min": 1,
+      "max": 100,
+      "step": 1,
+      "default_value": 22,
+      "value": 22
+    },
+    {
+      "id": "in_38",
+      "name": "Reverse Setup",
+      "localized_name": "Reverse Setup",
+      "group": "Cancel",
+      "type": "bool",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "default_value": true,
+      "value": true
+    },
+    {
+      "id": "in_39",
+      "name": "TDST rule",
+      "localized_name": "TDST rule",
+      "group": "Cancel",
+      "type": "bool",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "default_value": true,
+      "value": true
+    },
+    {
+      "id": "in_40",
+      "name": "Enable Breakout Qualifiers",
+      "localized_name": "Enable Breakout Qualifiers",
+      "group": "Breakout Qualifiers",
+      "type": "bool",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": false,
+      "default_value": true,
+      "value": true
+    },
+    {
+      "id": "__profile",
+      "name": "",
+      "localized_name": "",
+      "group": null,
+      "type": "bool",
+      "display": 0,
+      "active": true,
+      "is_fake": true,
+      "hidden": true,
+      "default_value": false,
+      "value": false
+    }
+  ],
+  "style_values": {
+    "styles": {},
+    "bands": {},
+    "filledAreas": {},
+    "palettes": {},
+    "graphics": {
+      "dwgboxes": {
+        "boxes": {
+          "visible": true
+        }
+      },
+      "dwglabels": {
+        "labels": {
+          "visible": true
+        }
+      },
+      "dwglines": {
+        "lines": {
+          "visible": true
+        }
+      }
+    },
+    "ohlcPlots": {},
+    "filledAreasStyle": {}
+  },
+  "graphics_summary": {
+    "line_count": 447,
+    "label_count": 459,
+    "box_count": 291,
+    "table_cell_count": 0
+  },
+  "recent_bars": [
+    {
+      "bar_index": 298,
+      "bar_number": 298,
+      "time": {
+        "raw": 1776294000,
+        "iso": "2026-04-15T23:00:00.000Z"
+      },
+      "open": 98.012,
+      "high": 98.292,
+      "low": 97.832,
+      "close": 98.179,
+      "volume": 0
+    },
+    {
+      "bar_index": 299,
+      "bar_number": 299,
+      "time": {
+        "raw": 1776380400,
+        "iso": "2026-04-16T23:00:00.000Z"
+      },
+      "open": 98.189,
+      "high": 98.28,
+      "low": 98.189,
+      "close": 98.223,
+      "volume": 0
+    }
+  ],
+  "visible_range": {
+    "from": 1773792000,
+    "to": 1777593600
+  },
+  "resolved_snapshot": {
+    "bar_index": 14008,
+    "x": 14008,
+    "chart_bar_index": 14008,
+    "time": {
+      "israel": "2026-04-17 02:00",
+      "utc": "2026-04-16T23:00:00.000Z",
+      "raw": 1776380400
+    },
+    "ohlcv": {
+      "open": 98.189,
+      "high": 98.28,
+      "low": 98.189,
+      "close": 98.223,
+      "volume": 0
+    },
+    "labels": [
+      {
+        "text": "9",
+        "price": 98.19,
+        "price_raw": 98.189,
+        "x": 14008,
+        "bar_index": 14008,
+        "resolved_count_type": "setup",
+        "direction": "buy",
+        "position": "below_bar",
+        "confidence": 1,
+        "count_value": 9,
+        "is_current": true,
+        "is_perfect_setup": false,
+        "is_extension": false,
+        "shade": null,
+        "marker_type": null
+      },
+      {
+        "text": "•",
+        "price": 98.19,
+        "price_raw": 98.189,
+        "x": 14008,
+        "bar_index": 14008,
+        "resolved_count_type": "indicator",
+        "direction": "buy",
+        "position": "below_bar",
+        "confidence": 1,
+        "count_value": null,
+        "is_current": true,
+        "is_perfect_setup": true,
+        "is_extension": false,
+        "shade": null,
+        "marker_type": null
+      }
+    ],
+    "perfect_setup": true,
+    "extensions": 0,
+    "summary": {
+      "label_count": 2,
+      "current_label_count": 2,
+      "counts": {
+        "setup": {
+          "buy": 1,
+          "sell": 0,
+          "unknown": 0
+        },
+        "sequential": {
+          "buy": 0,
+          "sell": 0,
+          "unknown": 0
+        },
+        "combo": {
+          "buy": 0,
+          "sell": 0,
+          "unknown": 0
+        },
+        "indicator": {
+          "buy": 1,
+          "sell": 0,
+          "unknown": 0
+        },
+        "unknown": {
+          "buy": 0,
+          "sell": 0,
+          "unknown": 0
+        }
+      },
+      "markers": {
+        "perfect_setup": 1,
+        "extensions": 0,
+        "tdst": 0
+      }
+    },
+    "active_signals": [
+      {
+        "label_id": null,
+        "text": "9",
+        "count_type": "setup",
+        "direction": "buy",
+        "is_current": true,
+        "is_perfect_setup": false,
+        "is_extension": false,
+        "price": 98.19,
+        "bar_index": 14008,
+        "bar_number": null,
+        "x": 14008,
+        "time": null,
+        "confidence": 1
+      },
+      {
+        "label_id": null,
+        "text": "•",
+        "count_type": "indicator",
+        "direction": "buy",
+        "is_current": true,
+        "is_perfect_setup": true,
+        "is_extension": false,
+        "price": 98.19,
+        "bar_index": 14008,
+        "bar_number": null,
+        "x": 14008,
+        "time": null,
+        "confidence": 1
+      }
+    ],
+    "risk_level_candidates": [],
+    "visible_range": {
+      "from": 1773792000,
+      "to": 1777593600
+    },
+    "current_bar_index": 14008,
+    "selection_mode": "latest",
+    "selection_value": null,
+    "include_context": false,
+    "source": "resolved_demark_snapshot"
+  },
+  "demark": {
+    "recognized": true,
+    "study_name": "DeMARK 9-13",
+    "label_count": 267,
+    "labels_analyzed": 263,
+    "current_bar_index": 299,
+    "summary": {
+      "label_count": 263,
+      "current_label_count": 216,
+      "counts": {
+        "setup": {
+          "buy": 56,
+          "sell": 44,
+          "unknown": 0
+        },
+        "sequential": {
+          "buy": 24,
+          "sell": 17,
+          "unknown": 0
+        },
+        "combo": {
+          "buy": 19,
+          "sell": 14,
+          "unknown": 0
+        },
+        "indicator": {
+          "buy": 54,
+          "sell": 35,
+          "unknown": 0
+        },
+        "unknown": {
+          "buy": 0,
+          "sell": 0,
+          "unknown": 0
+        }
+      },
+      "markers": {
+        "perfect_setup": 89,
+        "extensions": 0,
+        "tdst": 0
+      }
+    },
+    "recent_bars": [
+      {
+        "bar_index": 298,
+        "bar_number": 298,
+        "time": {
+          "raw": 1776294000,
+          "iso": "2026-04-15T23:00:00.000Z"
+        },
+        "open": 98.012,
+        "high": 98.292,
+        "low": 97.832,
+        "close": 98.179,
+        "volume": 0
+      },
+      {
+        "bar_index": 299,
+        "bar_number": 299,
+        "time": {
+          "raw": 1776380400,
+          "iso": "2026-04-16T23:00:00.000Z"
+        },
+        "open": 98.189,
+        "high": 98.28,
+        "low": 98.189,
+        "close": 98.223,
+        "volume": 0
+      }
+    ]
+  },
+  "source": "indicator_snapshot"
+}
