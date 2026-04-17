@@ -170,17 +170,17 @@ describe('normalizeStudyInputs', () => {
         20: { index: 20, time: 2, open: 100, high: 110, low: 95, close: 105, volume: 1000 },
       },
       labels: [
-        { id: 'setup-9', text: '• 9', price: 112, x: 20, textColor: 4289189541 },
-        { id: 'seq-1', text: '1', price: 113, x: 20, textColor: 4288979450 },
-        { id: 'combo-9', text: '9', price: 114, x: 20, textColor: 4293582464 },
+        { id: 'setup-1', text: '1', price: 112, x: 20, textColor: 4281898556 },
+        { id: 'seq-2', text: '2', price: 113, x: 20, textColor: 4281542834 },
+        { id: 'combo-3', text: '3', price: 114, x: 20, textColor: 4289173248 },
       ],
     });
 
     const types = result.bar_snapshots[0].labels.map(label => label.resolved_count_type);
-    assert.deepEqual(types.sort(), ['indicator', 'indicator', 'sequential']);
-    assert.equal(result.summary.counts.indicator.sell, 2);
-    assert.equal(result.summary.counts.sequential.sell, 1);
-    assert.equal(result.summary.counts.combo.sell, 0);
+    assert.deepEqual(types.sort(), ['combo', 'indicator', 'setup']);
+    assert.equal(result.summary.counts.setup.sell, 1);
+    assert.equal(result.summary.counts.combo.sell, 1);
+    assert.equal(result.summary.counts.indicator.sell, 1);
   });
 
   it('keeps all bar snapshots available for selection', () => {
@@ -235,6 +235,31 @@ describe('normalizeStudyInputs', () => {
     assert.equal(result.current_labels[0].resolved_count_type, 'indicator');
     assert.equal(result.current_labels[0].is_perfect_setup, true);
     assert.equal(result.current_labels[0].x, 30);
+  });
+
+  it('uses raw label price precision to keep below-bar labels as buy', () => {
+    const result = analyzeDemarkGraphics({
+      studyName: 'DeMARK 9-13',
+      lastIndex: 14008,
+      barLookup: {
+        14008: { index: 14008, time: 1776380400, open: 98.189, high: 98.28, low: 98.189, close: 98.222, volume: 0 },
+      },
+      labels: [
+        {
+          id: 'buy-raw',
+          text: '9',
+          price: 98.19,
+          price_raw: 98.189,
+          x: 14008,
+          textColor: 4281898556,
+        },
+      ],
+    });
+
+    assert.equal(result.current_labels[0].position, 'below_bar');
+    assert.equal(result.current_labels[0].direction, 'buy');
+    assert.equal(result.current_labels[0].resolved_count_type, 'setup');
+    assert.equal(result.summary.counts.setup.buy, 1);
   });
 
   it('selects the bar closest to the visible range center', () => {
@@ -297,6 +322,168 @@ describe('normalizeStudyInputs', () => {
     assert.equal(byTime.bar_index, 49);
     assert.equal(byTime.x, 49);
     assert.equal(byTime.selection_mode, 'time');
+  });
+
+  it('merges the latest chart bar with its enriched labels instead of dropping them', () => {
+    const demark = {
+      bar_snapshots: [
+        {
+          bar_index: 10,
+          bar_number: 10,
+          time: { raw: 1000, iso: '1970-01-01T00:16:40.000Z' },
+          open: 100,
+          high: 112,
+          low: 96,
+          close: 108,
+          volume: 11,
+          labels: [
+            { id: 'setup', text: '1', count_type: 'setup', resolved_count_type: 'setup', direction: 'buy', price: 95, bar_index: 10, bar_number: 10, x: 10, time: { raw: 1000, iso: '1970-01-01T00:16:40.000Z' } },
+            { id: 'combo', text: '1', count_type: 'combo', resolved_count_type: 'combo', direction: 'buy', price: 94, bar_index: 10, bar_number: 10, x: 10, time: { raw: 1000, iso: '1970-01-01T00:16:40.000Z' } },
+          ],
+        },
+      ],
+    };
+
+    const resolved = buildResolvedDemarkSnapshot(demark, null, {
+      selection: { mode: 'latest', value: null },
+      selected_bar: { index: 10, bar_index: 10, time: { raw: 1000, iso: '1970-01-01T00:16:40.000Z' }, open: 100, high: 112, low: 96, close: 108, volume: 11 },
+    });
+
+    assert.equal(resolved.bar_index, 10);
+    assert.equal(resolved.labels.length, 2);
+    assert.equal(resolved.labels.some(label => label.resolved_count_type === 'setup'), true);
+    assert.equal(resolved.labels.some(label => label.resolved_count_type === 'combo'), true);
+  });
+
+  it('keeps setup and combo labels together on the same bar', () => {
+    const result = analyzeDemarkGraphics({
+      studyName: 'DeMARK 9-13',
+      lastIndex: 10,
+      barLookup: {
+        10: { index: 10, time: 1000, open: 100, high: 112, low: 96, close: 108, volume: 11 },
+      },
+      labels: [
+        { id: 'setup-1', text: '1', price: 95, x: 10, textColor: 4281898556 },
+        { id: 'combo-1', text: '1', price: 94, x: 10, textColor: 4278228903 },
+      ],
+    });
+
+    assert.equal(result.bar_snapshots.length, 1);
+    assert.equal(result.bar_snapshots[0].labels.length, 2);
+    assert.equal(result.bar_snapshots[0].labels.some(label => label.resolved_count_type === 'setup'), true);
+    assert.equal(result.bar_snapshots[0].labels.some(label => label.resolved_count_type === 'combo'), true);
+    assert.equal(result.summary.counts.setup.buy + result.summary.counts.setup.sell, 1);
+    assert.equal(result.summary.counts.combo.buy + result.summary.counts.combo.sell, 1);
+  });
+
+  it('keeps setup and combo labels distinct even when text and price match', () => {
+    const result = analyzeDemarkGraphics({
+      studyName: 'DeMARK 9-13',
+      lastIndex: 12,
+      barLookup: {
+        12: { index: 12, time: 1200, open: 100, high: 112, low: 96, close: 108, volume: 11 },
+      },
+      labels: [
+        { id: 'setup-2', text: '2', price: 95, x: 12, textColor: 4281898556 },
+        { id: 'combo-2', text: '2', price: 95, x: 12, textColor: 4278220711 },
+      ],
+    });
+
+    assert.equal(result.bar_snapshots.length, 1);
+    assert.equal(result.bar_snapshots[0].labels.length, 2);
+    assert.equal(result.bar_snapshots[0].labels.some(label => label.resolved_count_type === 'setup'), true);
+    assert.equal(result.bar_snapshots[0].labels.some(label => label.resolved_count_type === 'combo'), true);
+  });
+
+  it('repairs an ambiguous numeric label into combo when setup and sequential are already present', () => {
+    const colorReferences = {
+      setup: {
+        dark: { r: 60, g: 142, b: 56 },
+        light: { r: 167, g: 214, b: 165 },
+      },
+      sequential: {
+        dark: { r: 51, g: 40, b: 178 },
+        light: { r: 164, g: 161, b: 250 },
+      },
+      combo: {
+        dark: { r: 0, g: 151, b: 167 },
+        light: { r: 128, g: 222, b: 234 },
+      },
+      tdst: {
+        dark: { r: 245, g: 124, b: 0 },
+        light: { r: 255, g: 204, b: 128 },
+      },
+    };
+
+    const result = analyzeDemarkGraphics({
+      studyName: 'DeMARK 9-13',
+      colorReferences,
+      lastIndex: 12,
+      barLookup: {
+        12: { index: 12, time: 1200, open: 100, high: 112, low: 96, close: 108, volume: 11 },
+      },
+      labels: [
+        { id: 'setup-2', text: '2', price: 95, x: 12, textColor: 4282158648 },
+        { id: 'seq-10', text: '10', price: 94, x: 12, textColor: 4281542834 },
+        { id: 'ambiguous-2', text: '2', price: 95, x: 12, textColor: 4294276096 },
+      ],
+    });
+
+    assert.equal(result.bar_snapshots.length, 1);
+    assert.equal(result.bar_snapshots[0].labels.some(label => label.resolved_count_type === 'setup'), true);
+    assert.equal(result.bar_snapshots[0].labels.some(label => label.resolved_count_type === 'sequential'), true);
+    assert.equal(result.bar_snapshots[0].labels.some(label => label.resolved_count_type === 'combo'), true);
+    assert.equal(result.summary.counts.combo.buy + result.summary.counts.combo.sell, 1);
+  });
+
+  it('uses the chart reference as the public bar index for live visible snapshots', () => {
+    const demark = analyzeDemarkGraphics({
+      studyName: 'DeMARK 9-13',
+      lastIndex: 2,
+      barLookup: {
+        1: { index: 1, time: 1000, open: 100, high: 110, low: 90, close: 105, volume: 10 },
+        2: { index: 2, time: 1060, open: 105, high: 112, low: 96, close: 108, volume: 11 },
+      },
+      labels: [
+        { id: 'bar-1', text: '5', price: 111, x: 1, textColor: 4289050279 },
+      ],
+    });
+
+    const resolved = buildResolvedDemarkSnapshot(demark, { from: 990, to: 1090 }, {
+      selection: { mode: 'visible', value: null },
+      chart_reference: { bar_index: 200, time_raw: 1060 },
+      chart_resolution: '1',
+    });
+
+    assert.equal(resolved.bar_index, 200);
+    assert.equal(resolved.x, 200);
+    assert.equal(resolved.chart_bar_index, 200);
+    assert.equal(resolved.internal_bar_index, undefined);
+    assert.equal(resolved.labels[0].bar_index, 200);
+  });
+
+  it('uses the chart reference as the public bar index for latest snapshots when available', () => {
+    const demark = analyzeDemarkGraphics({
+      studyName: 'DeMARK 9-13',
+      lastIndex: 2,
+      barLookup: {
+        1: { index: 1, time: 1000, open: 100, high: 110, low: 90, close: 105, volume: 10 },
+        2: { index: 2, time: 1060, open: 105, high: 112, low: 96, close: 108, volume: 11 },
+      },
+      labels: [
+        { id: 'bar-2', text: '1', price: 111, x: 2, textColor: 4282158648 },
+      ],
+    });
+
+    const resolved = buildResolvedDemarkSnapshot(demark, { from: 990, to: 1090 }, {
+      selection: { mode: 'latest', value: null },
+      chart_reference: { bar_index: 711, time_raw: 1060 },
+      chart_resolution: '1',
+    });
+
+    assert.equal(resolved.bar_index, 711);
+    assert.equal(resolved.x, 711);
+    assert.equal(resolved.chart_bar_index, 711);
   });
 
   it('keeps exact selection stable for a bar_index lookup', () => {
@@ -437,6 +624,33 @@ describe('normalizeStudyInputs', () => {
     assert.equal(resolved.labels[0].text, '3');
   });
 
+  it('keeps exact labels even when the raw snapshot bar_index is shifted', () => {
+    const demark = {
+      bar_snapshots: [
+        {
+          bar_index: 100,
+          bar_number: 100,
+          time: { raw: 1000, iso: '1970-01-01T00:16:40.000Z' },
+          open: 10,
+          high: 12,
+          low: 9,
+          close: 11,
+          volume: 1,
+          labels: [
+            { id: 'shifted', text: '1', count_type: 'setup', resolved_count_type: 'setup', direction: 'sell', price: 13, bar_index: 99, bar_number: 99, x: 99, time: { raw: 1000, iso: '1970-01-01T00:16:40.000Z' } },
+          ],
+        },
+      ],
+    };
+
+    const resolved = buildResolvedDemarkSnapshot(demark, null, {
+      selection: { mode: 'bar_index', value: 100 },
+    });
+
+    assert.equal(resolved.bar_index, 100);
+    assert.equal(resolved.labels.length, 0);
+  });
+
   it('resolves exact loaded times without falling back to a nearby bar', () => {
     const demark = analyzeDemarkGraphics({
       studyName: 'DeMARK 9-13',
@@ -465,6 +679,28 @@ describe('normalizeStudyInputs', () => {
     assert.equal(resolved404.labels.length, 1);
     assert.equal(resolved404.labels[0].bar_index, 404);
     assert.equal(resolved404.labels[0].text, '9');
+  });
+
+  it('does not force setup count 1 to sequential when the color family is setup', () => {
+    const demark = analyzeDemarkGraphics({
+      studyName: 'DeMARK 9-13',
+      lastIndex: 10,
+      barLookup: {
+        10: { index: 10, time: 1000, open: 1, high: 2, low: 1, close: 2, volume: 1 },
+      },
+      labels: [
+        { id: 'setup-1', text: '1', price: 3, x: 10, textColor: 4281898556 },
+      ],
+    });
+
+    const resolved = buildResolvedDemarkSnapshot(demark, null, {
+      selection: { mode: 'bar_index', value: 10 },
+    });
+
+    assert.equal(resolved.bar_index, 10);
+    assert.equal(resolved.labels.length, 1);
+    assert.equal(resolved.labels[0].text, '1');
+    assert.equal(resolved.labels[0].resolved_count_type, 'setup');
   });
 
   it('fails strict exact snapshots when a label remains unresolved', () => {
@@ -519,3 +755,5 @@ describe('normalizeStudyInputs', () => {
     assert.equal(result.current_labels[0].resolved_count_type, 'indicator');
   });
 });
+
+

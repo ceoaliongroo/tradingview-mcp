@@ -99,29 +99,41 @@ function formatTimeLabel(snapshot) {
 }
 
 function formatDemarkLine(snapshot) {
-  const barIndex = snapshot?.bar_index ?? snapshot?.current_bar_index ?? '?';
+  const barIndex = snapshot?.bar_index ?? snapshot?.chart_bar_index ?? '?';
   const labels = Array.isArray(snapshot?.labels) ? snapshot.labels : [];
-  const prefix = `${paint('[DMK]', ANSI.bold)} ${paint(formatTimeLabel(snapshot), ANSI.dim)} ${paint(`idx=${barIndex}`, ANSI.cyan)}`;
+  const prefix = `${paint('[DMK]', ANSI.bold)} ${paint(formatTimeLabel(snapshot), ANSI.dim)} ${paint(`bar_index=${barIndex}`, ANSI.cyan)}`;
 
   if (labels.length === 0) {
     return `${prefix} ${paint('sin conteo', ANSI.dim)}`;
   }
 
-  const chunks = labels.map(label => {
+  const chunks = [];
+  const seenMarkers = new Set();
+
+  for (const label of labels) {
     const type = label?.resolved_count_type || label?.count_type || 'indicator';
     const direction = label?.direction || 'unknown';
     const count = label?.count_value != null ? label.count_value : (label?.text ?? '').trim();
+
+    if (type === 'indicator') {
+      if (label?.is_perfect_setup && !seenMarkers.has('perfect_setup')) {
+        chunks.push(paint('perfect setup', ANSI.brightYellow));
+        seenMarkers.add('perfect_setup');
+      }
+      if (label?.is_extension && !seenMarkers.has('extension')) {
+        chunks.push(paint('extension', ANSI.brightYellow));
+        seenMarkers.add('extension');
+      }
+      continue;
+    }
+
     let piece = `${type} ${direction}`;
     if (count !== '' && count != null) piece += ` ${count}`;
-    if (label?.is_perfect_setup) piece += ' •';
-    if (label?.is_extension) piece += ' +';
-    if (label?.is_current) piece += ' *';
-    return paint(piece, typeColor(type, direction));
-  });
+    chunks.push(paint(piece, typeColor(type, direction)));
+  }
 
   return `${prefix} ${chunks.join(paint(' | ', ANSI.dim))}`;
 }
-
 async function resolveDemarkStudyId(filter = 'DeMARK 9-13') {
   const state = await getChartState();
   const needle = String(filter || '').toLowerCase();
@@ -503,3 +515,4 @@ async function fetchAllPanes() {
 export async function streamAllPanes({ interval } = {}) {
   return pollLoop(fetchAllPanes, { interval: interval || 500, label: 'all-panes' });
 }
+
