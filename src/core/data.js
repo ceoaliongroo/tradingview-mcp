@@ -634,11 +634,11 @@ export function buildResolvedDemarkSnapshot(demark, visibleRange, { selection = 
 
   if (selectionMode === 'latest') {
     currentBar = mergeSelectedBarWithSnapshot(
-      demarkCurrentRecentBar || demarkCurrentBar || selected_bar || null,
-      labeledBar || demarkCurrentBar || baselineBar || selectLatestBarSnapshot(barSnapshots) || selectBarSnapshotByVisibleRange(barSnapshots, visibleRange)
+      selected_bar || null,
+      labeledBar || baselineBar || demarkCurrentRecentBar || demarkCurrentBar || selectLatestBarSnapshot(barSnapshots) || selectBarSnapshotByVisibleRange(barSnapshots, visibleRange)
     );
     if (!currentBar) {
-      currentBar = demarkCurrentRecentBar || demarkCurrentBar || selected_bar || labeledBar || baselineBar || selectLatestBarSnapshot(barSnapshots) || selectBarSnapshotByVisibleRange(barSnapshots, visibleRange);
+      currentBar = labeledBar || baselineBar || demarkCurrentRecentBar || demarkCurrentBar || selected_bar || selectLatestBarSnapshot(barSnapshots) || selectBarSnapshotByVisibleRange(barSnapshots, visibleRange);
     }
   } else if (selectionMode === 'visible') {
     currentBar = mergeSelectedBarWithSnapshot(
