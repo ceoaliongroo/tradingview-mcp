@@ -2,6 +2,7 @@
  * Core screenshot/capture logic.
  */
 import { getClient, evaluate, getChartCollection } from '../connection.js';
+import { getState as getChartState } from './chart.js';
 import { writeFileSync, mkdirSync, readdirSync, statSync, copyFileSync, existsSync, readFileSync } from 'fs';
 import { homedir } from 'os';
 import { join, dirname } from 'path';
@@ -31,12 +32,12 @@ function findNewestDownloadedPng(sinceMs) {
   return best?.path || null;
 }
 
-async function getActiveChartMainDivBounds() {
+async function getActiveChartPaneBounds() {
   return evaluate(`
     (function() {
       try {
         var chart = window.TradingViewApi._activeChartWidgetWV.value();
-        var el = chart && chart._mainDiv ? chart._mainDiv : null;
+        var el = chart && chart._mainDiv ? (chart._mainDiv.parentElement || chart._mainDiv) : null;
         if (!el || typeof el.getBoundingClientRect !== 'function') return null;
         var rect = el.getBoundingClientRect();
         if (!rect || rect.width < 120 || rect.height < 120) return null;
@@ -48,7 +49,30 @@ async function getActiveChartMainDivBounds() {
   `);
 }
 
-export async function captureScreenshot({ region, filename, method } = {}) {
+function chartStateHasStudy(state, studyFilter) {
+  const needle = String(studyFilter || '').toLowerCase().trim();
+  if (!needle) return true;
+  const studies = Array.isArray(state?.studies) ? state.studies : [];
+  return studies.some(study => String(study?.name || '').toLowerCase().includes(needle));
+}
+
+async function validateActiveChartHasStudy(studyFilter) {
+  const filter = String(studyFilter || '').trim();
+  if (!filter) return;
+  const state = await getChartState().catch(() => null);
+  if (!chartStateHasStudy(state, filter)) {
+    throw new Error(`Active chart does not have study filter: ${filter}`);
+  }
+}
+
+async function getChartBoundsForStudyFilter(studyFilter) {
+  const filter = String(studyFilter || '').trim();
+  if (!filter) return null;
+  await validateActiveChartHasStudy(filter);
+  return getActiveChartPaneBounds();
+}
+
+export async function captureScreenshot({ region, filename, method, study_filter } = {}) {
   mkdirSync(SCREENSHOT_DIR, { recursive: true });
 
   const ts = new Date().toISOString().replace(/[:.]/g, '-');
@@ -100,7 +124,14 @@ export async function captureScreenshot({ region, filename, method } = {}) {
   let clip = undefined;
 
   if (region === 'chart') {
-    let bounds = await getActiveChartMainDivBounds();
+    let bounds = null;
+    if (study_filter) {
+      const studyBounds = await getChartBoundsForStudyFilter(study_filter);
+      bounds = studyBounds || null;
+    }
+    if (!bounds) {
+      bounds = await getActiveChartPaneBounds();
+    }
     if (!bounds) {
       bounds = await evaluate(`
         (function() {

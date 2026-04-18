@@ -8,6 +8,7 @@ const CHART_API = 'window.TradingViewApi._activeChartWidgetWV.value()';
 
 function normalizeResolutionLabel(resolution) {
   const res = String(resolution || '');
+  if (res === '1') return '1m';
   if (res === '5M') return '5m';
   if (res === '30M') return '30m';
   if (res === '5') return '5m';
@@ -20,6 +21,8 @@ function normalizeResolutionLabel(resolution) {
 export function normalizeTimeframeInput(timeframe) {
   const tf = String(timeframe || '').trim();
   const lower = tf.toLowerCase();
+  if (/^\d+m$/.test(tf)) return String(Number(tf.replace(/m$/, '')));
+  if (/^\d+h$/.test(lower)) return String(Number(lower.replace(/h$/, '')) * 60);
   if (lower === '5m') return '5';
   if (lower === '30m') return '30';
   if (lower === '2h') return '120';

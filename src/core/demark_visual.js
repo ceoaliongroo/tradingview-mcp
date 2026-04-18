@@ -1,4 +1,5 @@
 import { evaluate, KNOWN_PATHS, safeString } from '../connection.js';
+import { getState as getChartState } from './chart.js';
 import { captureClip } from './capture.js';
 import { getStudyValues } from './data.js';
 import { execFileSync } from 'child_process';
@@ -49,6 +50,30 @@ function extractDebugChartReference(studies) {
 async function getDebugChartReference() {
   const studyValuesSnapshot = await getStudyValues().catch(() => null);
   return extractDebugChartReference(studyValuesSnapshot?.studies || []);
+}
+
+async function getActiveChartPaneBounds() {
+  return evaluate(`
+    (function() {
+      try {
+        var chart = window.TradingViewApi._activeChartWidgetWV.value();
+        var el = chart && chart._mainDiv ? (chart._mainDiv.parentElement || chart._mainDiv) : null;
+        if (!el || typeof el.getBoundingClientRect !== 'function') return null;
+        var rect = el.getBoundingClientRect();
+        if (!rect || rect.width < 120 || rect.height < 120) return null;
+        return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+      } catch (e) {
+        return null;
+      }
+    })()
+  `);
+}
+
+function chartStateHasStudy(state, studyFilter) {
+  const needle = String(studyFilter || '').toLowerCase().trim();
+  if (!needle) return true;
+  const studies = Array.isArray(state?.studies) ? state.studies : [];
+  return studies.some(study => String(study?.name || '').toLowerCase().includes(needle));
 }
 
 function normalizeSelection(selection) {
@@ -183,7 +208,7 @@ export async function ensureDemarkVisualZoom({ selection = { mode: 'latest', val
   return { success: true, ...result };
 }
 
-export async function getDemarkVisualFocusContext({ selection = { mode: 'latest', value: null }, chart_reference = null } = {}) {
+export async function getDemarkVisualFocusContext({ selection = { mode: 'latest', value: null }, chart_reference = null, study_filter = null, pane_bounds = null } = {}) {
   const snapshot = await evaluate(`
     (function() {
       var api = ${CHART_API};
@@ -191,6 +216,7 @@ export async function getDemarkVisualFocusContext({ selection = { mode: 'latest'
       var ts = model.timeScale();
       var bar = ${buildResolveBarExpression(selection, chart_reference)};
       if (!bar) return { error: 'Unable to resolve selected chart bar.' };
+      var paneOverride = ${pane_bounds ? JSON.stringify(pane_bounds) : 'null'};
 
       function pickMainPaneCanvas() {
         var activeChart = api._activeChartWidgetWV && typeof api._activeChartWidgetWV.value === 'function'
@@ -222,7 +248,9 @@ export async function getDemarkVisualFocusContext({ selection = { mode: 'latest'
         || document.querySelector('[class*="chart-container"] canvas')
         || document.querySelector('canvas');
       if (!pane) return { error: 'Unable to locate chart pane canvas.' };
-      var rect = pane.getBoundingClientRect();
+      var rect = paneOverride && paneOverride.width && paneOverride.height
+        ? paneOverride
+        : pane.getBoundingClientRect();
 
       var priceScale = model.mainSeries && model.mainSeries().priceScale ? model.mainSeries().priceScale() : null;
       var pr = priceScale && typeof priceScale.priceRange === 'function' ? priceScale.priceRange() : priceScale && priceScale._priceRange ? priceScale._priceRange : null;
@@ -285,11 +313,18 @@ export function computeFocusColumnClip({ pane_bounds, bar_x_screen, column_width
   };
 }
 
-export async function captureDemarkFocusColumn({ selection = { mode: 'latest', value: null }, min_bar_spacing = 28, bars_before = 2, bars_after = 2, column_width = 96, filename_prefix = 'demark_focus' } = {}) {
+export async function captureDemarkFocusColumn({ selection = { mode: 'latest', value: null }, study_filter = null, min_bar_spacing = 28, bars_before = 2, bars_after = 2, column_width = 96, filename_prefix = 'demark_focus' } = {}) {
+  if (study_filter) {
+    const activeState = await getChartState().catch(() => null);
+    if (!chartStateHasStudy(activeState, study_filter)) {
+      throw new Error(`Active chart does not have study filter: ${study_filter}`);
+    }
+  }
   const chartReference = await getDebugChartReference();
   await ensureDemarkVisualZoom({ selection, min_bar_spacing, bars_before, bars_after, chart_reference: chartReference });
   await new Promise(resolve => setTimeout(resolve, 250));
-  const context = await getDemarkVisualFocusContext({ selection, chart_reference: chartReference });
+  const paneBounds = await getActiveChartPaneBounds();
+  const context = await getDemarkVisualFocusContext({ selection, chart_reference: chartReference, pane_bounds: paneBounds });
   const clip = computeFocusColumnClip({
     pane_bounds: context.pane_bounds,
     bar_x_screen: context.bar_x_screen,

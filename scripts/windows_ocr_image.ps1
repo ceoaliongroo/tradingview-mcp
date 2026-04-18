@@ -41,11 +41,33 @@ function Await-WinRtResult {
 
 function Convert-BoundingRect {
     param($Rect)
+    if (-not $Rect) {
+        return $null
+    }
+
+    $x = $null
+    $y = $null
+    $width = $null
+    $height = $null
+
+    foreach ($candidate in @('X', 'x')) {
+        if ($Rect.PSObject.Properties.Name -contains $candidate) { $x = [int]$Rect.$candidate; break }
+    }
+    foreach ($candidate in @('Y', 'y')) {
+        if ($Rect.PSObject.Properties.Name -contains $candidate) { $y = [int]$Rect.$candidate; break }
+    }
+    foreach ($candidate in @('Width', 'width')) {
+        if ($Rect.PSObject.Properties.Name -contains $candidate) { $width = [int]$Rect.$candidate; break }
+    }
+    foreach ($candidate in @('Height', 'height')) {
+        if ($Rect.PSObject.Properties.Name -contains $candidate) { $height = [int]$Rect.$candidate; break }
+    }
+
     return @{
-        x = [int]$Rect.X
-        y = [int]$Rect.Y
-        width = [int]$Rect.Width
-        height = [int]$Rect.Height
+        x = $x
+        y = $y
+        width = $width
+        height = $height
     }
 }
 
@@ -66,15 +88,31 @@ $lines = @()
 foreach ($line in $result.Lines) {
     $words = @()
     foreach ($word in $line.Words) {
+        $wordRect = $null
+        if ($word.PSObject.Properties.Name -contains 'BoundingRect') {
+            $wordRect = $word.BoundingRect
+        } elseif ($word.PSObject.Properties.Name -contains 'Bounds') {
+            $wordRect = $word.Bounds
+        } elseif ($word.PSObject.Properties.Name -contains 'Rectangle') {
+            $wordRect = $word.Rectangle
+        }
         $words += @{
             text = $word.Text
-            bounds = Convert-BoundingRect -Rect $word.BoundingRect
+            bounds = Convert-BoundingRect -Rect $wordRect
         }
     }
 
+    $lineRect = $null
+    if ($line.PSObject.Properties.Name -contains 'BoundingRect') {
+        $lineRect = $line.BoundingRect
+    } elseif ($line.PSObject.Properties.Name -contains 'Bounds') {
+        $lineRect = $line.Bounds
+    } elseif ($line.PSObject.Properties.Name -contains 'Rectangle') {
+        $lineRect = $line.Rectangle
+    }
     $lines += @{
         text = $line.Text
-        bounds = Convert-BoundingRect -Rect $line.BoundingRect
+        bounds = Convert-BoundingRect -Rect $lineRect
         words = $words
     }
 }

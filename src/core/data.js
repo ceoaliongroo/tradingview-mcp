@@ -434,9 +434,8 @@ function barsShareIdentity(a, b) {
   const timeB = extractBarTimeRaw(b);
   const hasIndex = Number.isFinite(indexA) && Number.isFinite(indexB);
   const hasTime = Number.isFinite(timeA) && Number.isFinite(timeB);
-  if (hasIndex && hasTime) return indexA === indexB && timeA === timeB;
-  if (hasIndex) return indexA === indexB;
   if (hasTime) return timeA === timeB;
+  if (hasIndex) return indexA === indexB;
   return false;
 }
 
@@ -459,32 +458,24 @@ function mergeSelectedBarWithSnapshot(selectedBar, snapshotBar, { preferSnapshot
   };
 }
 
-function mergeBarDataAndLabels(dataBar, labelBar) {
-  if (!dataBar && !labelBar) return null;
-  if (!dataBar) return labelBar || null;
-  if (!labelBar) return dataBar || null;
-
-  const mergedLabels = Array.isArray(labelBar?.labels) ? labelBar.labels : Array.isArray(dataBar?.labels) ? dataBar.labels : [];
-  return {
-    ...labelBar,
-    ...dataBar,
-    labels: mergedLabels,
-    perfect_setup: labelBar?.perfect_setup ?? dataBar?.perfect_setup ?? false,
-    extensions: labelBar?.extensions ?? dataBar?.extensions ?? 0,
-  };
-}
-
-function resolveLabelsForFocusBar(labels, focusBarIndex) {
+function resolveLabelsForFocusBar(labels, focusBarIndex, focusBarTimeRaw = null, { allowTimeFallback = false } = {}) {
   const list = Array.isArray(labels) ? labels : [];
   if (list.length === 0) return [];
   const numericFocus = Number(focusBarIndex);
-  if (!Number.isFinite(numericFocus)) return list.slice();
+  const numericFocusTime = Number(focusBarTimeRaw);
 
   const exact = list.filter(label => {
-    if (label?.bar_index == null) return true;
+    if (!Number.isFinite(Number(label?.bar_index))) return false;
     return Number(label.bar_index) === numericFocus;
   });
-  return exact;
+  if (exact.length > 0) return exact;
+
+  if (allowTimeFallback && Number.isFinite(numericFocusTime)) {
+    const byTime = list.filter(label => Number(extractBarTimeRaw(label)) === numericFocusTime);
+    if (byTime.length > 0) return byTime;
+  }
+
+  return Number.isFinite(numericFocus) ? [] : list.slice();
 }
 
 function parseNumericStudyValue(value) {
@@ -562,7 +553,7 @@ function selectBarSnapshotBySelection(barSnapshots, visibleRange, selection, cha
     const chartTimeRaw = Number.isFinite(chartReference?.time_raw) ? Number(chartReference.time_raw) : null;
     if (Number.isFinite(chartTimeRaw)) {
       const exactTimeMatch = bars.find(bar => Number(bar?.time?.raw) === Number(chartTimeRaw));
-      if (exactTimeMatch) return exactTimeMatch;
+      return exactTimeMatch || null;
     }
   }
 
@@ -666,13 +657,20 @@ export function buildResolvedDemarkSnapshot(demark, visibleRange, { selection = 
   let currentBar = null;
 
   if (selectionMode === 'latest') {
-    const latestDataBar = chart_reference
-      ? (demarkCurrentRecentBar || demarkCurrentBar || exactSelectionBar || chart_bar || selected_bar || selectBarSnapshotByVisibleRange(barSnapshots, visibleRange) || baselineBar)
-      : (selected_bar || exactSelectionBar || chart_bar || demarkCurrentRecentBar || demarkCurrentBar || selectBarSnapshotByVisibleRange(barSnapshots, visibleRange) || baselineBar);
-    const latestLabelBar = exactSelectionBar || labeledBar || selected_bar || chart_bar || baselineBar || demarkCurrentRecentBar || demarkCurrentBar;
-    currentBar = mergeBarDataAndLabels(latestDataBar || null, latestLabelBar || null);
+    const latestSnapshotCandidate = exactSelectionBar
+      || labeledBar
+      || demarkCurrentBar
+      || demarkCurrentRecentBar
+      || baselineBar
+      || selectBarSnapshotByVisibleRange(barSnapshots, visibleRange)
+      || null;
+    currentBar = mergeSelectedBarWithSnapshot(
+      selected_bar || null,
+      latestSnapshotCandidate,
+      { preferSnapshotOnMismatch: !!chart_reference }
+    );
     if (!currentBar) {
-      currentBar = latestLabelBar || latestDataBar || selected_bar || chart_bar || null;
+      currentBar = latestSnapshotCandidate || selected_bar || null;
     }
   } else if (selectionMode === 'visible') {
     currentBar = mergeSelectedBarWithSnapshot(
@@ -701,17 +699,15 @@ export function buildResolvedDemarkSnapshot(demark, visibleRange, { selection = 
       : (Number.isFinite(chartBarIndex) ? chartBarIndex : null))
     ?? currentBarIndex;
   const currentDisplayBarIndex = Number.isFinite(publicBarIndex) ? publicBarIndex : currentBarIndex;
-  const labelFocusBarIndex = selectionMode === 'latest' && Number.isFinite(currentDisplayBarIndex)
-    ? currentDisplayBarIndex
-    : currentBarIndex;
-  let currentLabels = resolveLabelsForFocusBar(currentBar?.labels, labelFocusBarIndex);
-  if (selectionMode === 'latest' && chart_reference && currentLabels.length === 0 && Array.isArray(currentBar?.labels) && currentBar.labels.length > 0) {
-    currentLabels = currentBar.labels.slice();
-  }
-  const hasSelectionMismatch = Number.isFinite(selectedBarIndex) && Number.isFinite(labelFocusBarIndex) && Number(selectedBarIndex) !== Number(labelFocusBarIndex);
-  if ((selectionMode === 'latest' || selectionMode === 'visible') && currentLabels.length === 0 && Array.isArray(currentBar?.labels) && hasSelectionMismatch) {
-    currentLabels = currentBar.labels.slice();
-  }
+  const labelFocusBarIndex = Number.isFinite(currentBarIndex)
+    ? currentBarIndex
+    : currentDisplayBarIndex;
+  let currentLabels = resolveLabelsForFocusBar(
+    currentBar?.labels,
+    labelFocusBarIndex,
+    currentBarTime,
+    { allowTimeFallback: selectionMode === 'latest' }
+  );
 
   const currentTime = extractBarTimeRaw(currentBar) ?? extractBarTimeRaw(chart_bar);
   const currentOhlcv = currentBar
@@ -732,13 +728,6 @@ export function buildResolvedDemarkSnapshot(demark, visibleRange, { selection = 
         }
       : null;
   const labels = currentLabels.map(label => {
-    const labelPrice = label.price_raw ?? label.price ?? null;
-    const positionInfo = classifyLabelPosition(labelPrice, currentOhlcv);
-    const directionFromPosition = positionInfo.position === 'above_bar'
-      ? 'sell'
-      : positionInfo.position === 'below_bar'
-        ? 'buy'
-        : null;
     return {
       text: label.text ?? null,
       price: label.price ?? null,
@@ -746,11 +735,9 @@ export function buildResolvedDemarkSnapshot(demark, visibleRange, { selection = 
       x: currentDisplayBarIndex ?? label.bar_index ?? null,
       bar_index: currentDisplayBarIndex ?? label.bar_index ?? null,
       resolved_count_type: label.resolved_count_type || label.count_type || 'unknown',
-      direction: directionFromPosition || label.direction || null,
-      position: positionInfo.position || label.position || null,
-      confidence: directionFromPosition
-        ? Math.max(label.confidence ?? 0, positionInfo.confidence ?? 0)
-        : (label.confidence ?? null),
+      direction: label.direction || null,
+      position: label.position || null,
+      confidence: label.confidence ?? null,
       count_value: label.count_value ?? null,
       is_current: !!label.is_current,
       is_perfect_setup: !!label.is_perfect_setup,

@@ -183,6 +183,8 @@ async function resolveLiveSelection(mode = 'hovered', value = null) {
   return { mode: 'visible', value: null };
 }
 
+export { formatDemarkLine };
+
 export async function streamDemark({ interval, filter, mode, value, once = false } = {}) {
   const pollInterval = interval || 1000;
   const studyFilter = filter || 'DeMARK 9-13';

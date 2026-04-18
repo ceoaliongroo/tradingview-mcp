@@ -151,9 +151,20 @@ describe('chart.js — sanitized evaluate calls', () => {
 
   it('setTimeframe uses safeString', async () => {
     const { _deps, evaluate } = mockDeps();
-    await setTimeframe({ timeframe: '15', _deps });
+    await setTimeframe({ timeframe: '1m', _deps });
     const call = evaluate.calls.find(c => c.includes('setResolution'));
-    assert.ok(call.includes('"15"'), 'timeframe wrapped via safeString');
+    assert.ok(call.includes('"1"'), '1m timeframe normalized to 1-minute resolution');
+  });
+
+  it('setTimeframe normalizes intraday minutes and hours', async () => {
+    const { _deps, evaluate } = mockDeps();
+    await setTimeframe({ timeframe: '30m', _deps });
+    await setTimeframe({ timeframe: '8h', _deps });
+    await setTimeframe({ timeframe: '1M', _deps });
+    const calls = evaluate.calls.filter(c => c.includes('setResolution'));
+    assert.ok(calls[0].includes('"30"'), '30m normalized to 30-minute resolution');
+    assert.ok(calls[1].includes('"480"'), '8h normalized to 480-minute resolution');
+    assert.ok(calls[2].includes('"M"'), '1M normalized to monthly resolution');
   });
 
   it('setType validates chart type range 0-9', async () => {
