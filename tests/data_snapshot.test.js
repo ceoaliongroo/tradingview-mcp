@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 
 import {
   analyzeDemarkGraphics,
+  buildVwapDvaSnapshot,
   classifyDemarkColor,
   normalizeDemarkText,
   normalizeStudyInputs,
@@ -173,5 +174,89 @@ describe('normalizeStudyInputs', () => {
     assert.equal(result.summary.counts.setup.sell, 1);
     assert.equal(result.summary.counts.sequential.sell, 1);
     assert.equal(result.summary.counts.combo.sell, 1);
+  });
+
+  it('builds a versioned annual DVA snapshot with current and previous areas', () => {
+    const snapshot = buildVwapDvaSnapshot({
+      symbol: 'BITSTAMP:BTCUSD',
+      resolution: '1D',
+      chartLastIndex: 299,
+      studyVisible: true,
+      rows: [
+        {
+          index: 191,
+          value: [
+            1767139200,
+            100352.74514938725,
+            4283585279,
+            112554.21780299074,
+            866689954,
+            88151.27249578376,
+            866689954,
+            124755.69045659422,
+            866689954,
+            75949.79984218028,
+            866689954,
+            136957.1631101977,
+            866689954,
+            63748.327188576804,
+            866689954,
+            106453.48147618899,
+            2158535586,
+            94252.00882258551,
+            2158535586,
+            118654.95412979249,
+            11051938,
+            82050.53616898201,
+            11051938,
+            866689954,
+            866689954,
+            866689954,
+          ],
+        },
+        {
+          index: 299,
+          value: [
+            1776470400,
+            74316.01121211374,
+            4283585279,
+            83677.7438297834,
+            866689954,
+            64954.27859444407,
+            866689954,
+            93039.47644745307,
+            866689954,
+            55592.5459767744,
+            866689954,
+            102401.20906512273,
+            866689954,
+            46230.81335910474,
+            866689954,
+            78996.87752094856,
+            2158535586,
+            69635.14490327891,
+            2158535586,
+            88358.61013861824,
+            11051938,
+            60273.412285609236,
+            11051938,
+            866689954,
+            866689954,
+            866689954,
+          ],
+        },
+      ],
+    });
+
+    assert.equal(snapshot.source, 'vwap_dva_snapshot_v1');
+    assert.equal(snapshot.schema_version, 'v1');
+    assert.equal(snapshot.dva.type, 'annual');
+    assert.equal(snapshot.dva.anchor, 'Year');
+    assert.equal(snapshot.dva.current_period.year, 2026);
+    assert.equal(snapshot.dva.current.bar_index, 299);
+    assert.equal(snapshot.dva.previous.bar_index, 191);
+    assert.equal(snapshot.dva.current.variables.VWAP, 74316.01121211374);
+    assert.equal(snapshot.dva.previous.variables.DVAH, 112554.21780299074);
+    assert.equal(snapshot.dva.current.display_values.VWAP, '74,316.011212');
   });
 });

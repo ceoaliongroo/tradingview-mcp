@@ -546,6 +546,99 @@ export function analyzeDemarkGraphics({ labels = [], lines = [], boxes = [], bar
   };
 }
 
+function decodeVwapDvaRow(row) {
+  if (!row || !Array.isArray(row.value)) return null;
+  const v = row.value;
+  return {
+    bar_index: typeof row.index === 'number' ? row.index : null,
+    time: typeof v[0] === 'number' ? v[0] : null,
+    variables: {
+      VWAP: typeof v[1] === 'number' ? v[1] : null,
+      DVAH: typeof v[3] === 'number' ? v[3] : null,
+      DVAL: typeof v[5] === 'number' ? v[5] : null,
+      'DVA+2': typeof v[7] === 'number' ? v[7] : null,
+      'DVA-2': typeof v[9] === 'number' ? v[9] : null,
+      'DVA+3': typeof v[11] === 'number' ? v[11] : null,
+      'DVA-3': typeof v[13] === 'number' ? v[13] : null,
+      'middle up 0.5': typeof v[15] === 'number' ? v[15] : null,
+      'middle down 0.5': typeof v[17] === 'number' ? v[17] : null,
+      'Middle up 1.5': typeof v[19] === 'number' ? v[19] : null,
+      'Middle down 1.5': typeof v[21] === 'number' ? v[21] : null,
+    },
+  };
+}
+
+function formatVwapDvaValue(value) {
+  if (typeof value !== 'number' || !isFinite(value)) return null;
+  return value.toLocaleString('en-US', { maximumFractionDigits: 6 });
+}
+
+function findVwapAnnualBoundary(rows) {
+  if (!Array.isArray(rows) || rows.length < 2) return null;
+  for (let i = 1; i < rows.length; i++) {
+    const prevTime = rows[i - 1]?.time;
+    const curTime = rows[i]?.time;
+    if (typeof prevTime !== 'number' || typeof curTime !== 'number') continue;
+    const prevYear = new Date(prevTime * 1000).getUTCFullYear();
+    const curYear = new Date(curTime * 1000).getUTCFullYear();
+    if (prevYear !== curYear) {
+      return { previous_index: i - 1, current_index: i, previous_year: prevYear, current_year: curYear };
+    }
+  }
+  return null;
+}
+
+export function buildVwapDvaSnapshot({ symbol = null, resolution = null, studyVisible = null, studyName = 'Vwap MantillaPB', rows = [], chartLastIndex = null } = {}) {
+  const normalizedRows = [];
+  const sourceRows = Array.isArray(rows) ? rows : [];
+  for (const row of sourceRows) {
+    const decoded = decodeVwapDvaRow(row);
+    if (decoded) normalizedRows.push(decoded);
+  }
+
+  const currentRow = normalizedRows.length > 0 ? normalizedRows[normalizedRows.length - 1] : null;
+  const boundary = findVwapAnnualBoundary(normalizedRows);
+  const previousRow = boundary && boundary.previous_index != null
+    ? normalizedRows[boundary.previous_index]
+    : (normalizedRows.length > 1 ? normalizedRows[normalizedRows.length - 2] : null);
+  const currentPeriodRow = boundary && boundary.current_index != null
+    ? normalizedRows[boundary.current_index]
+    : currentRow;
+  const isDaily = resolution === 'D' || resolution === '1D';
+
+  const buildArea = (row, year) => row ? {
+    bar_index: row.bar_index,
+    time: row.time,
+    year: year ?? null,
+    variables: row.variables,
+    display_values: Object.fromEntries(Object.entries(row.variables).map(([key, value]) => [key, formatVwapDvaValue(value)])),
+  } : null;
+
+  return {
+    success: true,
+    source: 'vwap_dva_snapshot_v1',
+    schema_version: 'v1',
+    symbol,
+    resolution,
+    chart_last_index: chartLastIndex,
+    study: {
+      name: studyName,
+      visible: studyVisible,
+    },
+    dva: {
+      type: isDaily ? 'annual' : null,
+      anchor: isDaily ? 'Year' : null,
+      current_period: currentPeriodRow ? {
+        start_bar_index: currentPeriodRow.bar_index,
+        start_time: currentPeriodRow.time,
+        year: boundary ? boundary.current_year : null,
+      } : null,
+      current: buildArea(currentRow, boundary ? boundary.current_year : null),
+      previous: buildArea(previousRow, boundary ? boundary.previous_year : null),
+    },
+  };
+}
+
 export function normalizeStudyInputs(inputDefinitions, currentInputs = [], { previewLimit = MAX_INPUT_PREVIEW } = {}) {
   const currentMap = new Map();
 
@@ -1248,12 +1341,128 @@ export async function getDepth() {
   return { success: true, bid_levels: data.bids?.length || 0, ask_levels: data.asks?.length || 0, spread: data.spread, bids: data.bids || [], asks: data.asks || [], raw_values: data.raw_values, note: data.note };
 }
 
+export async function getDvaSnapshot() {
+  const data = await evaluate(`
+    (function() {
+      var chart = window.TradingViewApi._activeChartWidgetWV.value()._chartWidget;
+      var api = window.TradingViewApi._activeChartWidgetWV.value();
+      var sources = chart.model().model().dataSources();
+      var study = null;
+      for (var si = 0; si < sources.length; si++) {
+        var s = sources[si];
+        if (!s || !s.metaInfo) continue;
+        try {
+          var meta = s.metaInfo();
+          var name = meta.description || meta.shortDescription || '';
+          if (name === 'Vwap MantillaPB') { study = s; break; }
+        } catch(e) {}
+      }
+      if (!study) return { error: 'Vwap MantillaPB study not found.' };
+
+      var resolution = null;
+      try { resolution = typeof api.resolution === 'function' ? api.resolution() : null; } catch(e) {}
+      var symbol = null;
+      try { symbol = typeof api.symbol === 'function' ? api.symbol() : null; } catch(e) {}
+      var chartLastIndex = null;
+      try { chartLastIndex = chart.model().mainSeries().bars().lastIndex(); } catch(e) {}
+      var studyVisible = null;
+      try { studyVisible = typeof study.isVisible === 'function' ? study.isVisible() : null; } catch(e) {}
+
+      var rows = [];
+      try {
+        var rawRows = study._data && Array.isArray(study._data._items) ? study._data._items : [];
+        for (var i = 0; i < rawRows.length; i++) {
+          var row = rawRows[i];
+          if (!row || !Array.isArray(row.value)) continue;
+          rows.push({ index: typeof row.index === 'number' ? row.index : null, value: row.value });
+        }
+      } catch(e) {}
+
+      return {
+        symbol: symbol,
+        resolution: resolution,
+        chart_last_index: chartLastIndex,
+        study_visible: studyVisible,
+        study_name: 'Vwap MantillaPB',
+        rows: rows,
+      };
+    })()
+  `);
+
+  if (!data || data.error) throw new Error(data?.error || 'Could not resolve Vwap MantillaPB snapshot.');
+  return buildVwapDvaSnapshot({
+    symbol: data.symbol ?? null,
+    resolution: data.resolution ?? null,
+    studyVisible: data.study_visible ?? null,
+    studyName: data.study_name ?? 'Vwap MantillaPB',
+    rows: data.rows ?? [],
+    chartLastIndex: data.chart_last_index ?? null,
+  });
+}
+
 export async function getStudyValues() {
   const data = await evaluate(`
     (function() {
       var chart = window.TradingViewApi._activeChartWidgetWV.value()._chartWidget;
       var model = chart.model();
       var sources = model.model().dataSources();
+      var resolution = null;
+      try {
+        var api = window.TradingViewApi._activeChartWidgetWV.value();
+        resolution = typeof api.resolution === 'function' ? api.resolution() : null;
+      } catch(e) {}
+
+      function formatValue(value) {
+        if (typeof value !== 'number' || !isFinite(value)) return null;
+        return value.toLocaleString('en-US', { maximumFractionDigits: 6 });
+      }
+
+      function decodeVwapRow(row) {
+        if (!row || !Array.isArray(row.value)) return null;
+        var v = row.value;
+        return {
+          bar_index: typeof row.index === 'number' ? row.index : null,
+          time: typeof v[0] === 'number' ? v[0] : null,
+          variables: {
+            VWAP: typeof v[1] === 'number' ? v[1] : null,
+            DVAH: typeof v[3] === 'number' ? v[3] : null,
+            DVAL: typeof v[5] === 'number' ? v[5] : null,
+            'DVA+2': typeof v[7] === 'number' ? v[7] : null,
+            'DVA-2': typeof v[9] === 'number' ? v[9] : null,
+            'DVA+3': typeof v[11] === 'number' ? v[11] : null,
+            'DVA-3': typeof v[13] === 'number' ? v[13] : null,
+            'middle up 0.5': typeof v[15] === 'number' ? v[15] : null,
+            'middle down 0.5': typeof v[17] === 'number' ? v[17] : null,
+            'Middle up 1.5': typeof v[19] === 'number' ? v[19] : null,
+            'Middle down 1.5': typeof v[21] === 'number' ? v[21] : null,
+          },
+        };
+      }
+
+      function formatDecodedValues(decoded) {
+        var out = {};
+        if (!decoded || !decoded.variables) return out;
+        Object.keys(decoded.variables).forEach(function(key) {
+          out[key] = formatValue(decoded.variables[key]);
+        });
+        return out;
+      }
+
+      function findAnnualBoundary(rows) {
+        if (!Array.isArray(rows) || rows.length < 2) return null;
+        for (var i = 1; i < rows.length; i++) {
+          var prevTime = rows[i - 1] && rows[i - 1].time;
+          var curTime = rows[i] && rows[i].time;
+          if (typeof prevTime !== 'number' || typeof curTime !== 'number') continue;
+          var prevYear = new Date(prevTime * 1000).getUTCFullYear();
+          var curYear = new Date(curTime * 1000).getUTCFullYear();
+          if (prevYear !== curYear) {
+            return { previous_index: i - 1, current_index: i, previous_year: prevYear, current_year: curYear };
+          }
+        }
+        return null;
+      }
+
       var results = [];
       for (var si = 0; si < sources.length; si++) {
         var s = sources[si];
@@ -1275,7 +1484,49 @@ export async function getStudyValues() {
               }
             }
           } catch(e) {}
-          if (Object.keys(values).length > 0) results.push({ name: name, values: values });
+          var result = { name: name, values: values };
+
+          if (name === 'Vwap MantillaPB') {
+            var rows = [];
+            try {
+              var rawRows = s._data && Array.isArray(s._data._items) ? s._data._items : [];
+              for (var ri = 0; ri < rawRows.length; ri++) {
+                var decoded = decodeVwapRow(rawRows[ri]);
+                if (decoded) rows.push(decoded);
+              }
+            } catch(e) {}
+
+            var currentRow = rows.length > 0 ? rows[rows.length - 1] : null;
+            var boundary = findAnnualBoundary(rows);
+            var previousRow = boundary && boundary.previous_index != null ? rows[boundary.previous_index] : (rows.length > 1 ? rows[rows.length - 2] : null);
+            var currentPeriodRow = boundary && boundary.current_index != null ? rows[boundary.current_index] : currentRow;
+            var dailyResolution = resolution === 'D' || resolution === '1D';
+
+            result.dva = {
+              type: dailyResolution ? 'annual' : null,
+              anchor: dailyResolution ? 'Year' : null,
+              current_period: currentPeriodRow ? {
+                start_bar_index: currentPeriodRow.bar_index,
+                start_time: currentPeriodRow.time,
+                year: boundary ? boundary.current_year : null,
+              } : null,
+              current: currentRow ? {
+                bar_index: currentRow.bar_index,
+                time: currentRow.time,
+                variables: currentRow.variables,
+                display_values: formatDecodedValues(currentRow),
+              } : null,
+              previous: previousRow ? {
+                bar_index: previousRow.bar_index,
+                time: previousRow.time,
+                year: boundary ? boundary.previous_year : null,
+                variables: previousRow.variables,
+                display_values: formatDecodedValues(previousRow),
+              } : null,
+            };
+          }
+
+          if (Object.keys(values).length > 0 || result.dva) results.push(result);
         } catch(e) {}
       }
       return results;
