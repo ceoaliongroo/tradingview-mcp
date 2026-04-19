@@ -718,8 +718,8 @@ export function buildVwapDvaSnapshot({ symbol = null, resolution = null, studyVi
 
   return {
     success: true,
-    source: 'vwap_dva_snapshot_v2',
-    schema_version: 'v2',
+    source: 'vwap_dva_snapshot_v3',
+    schema_version: 'v3',
     symbol,
     resolution,
     chart_last_index: chartLastIndex,

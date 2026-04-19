@@ -248,8 +248,8 @@ describe('normalizeStudyInputs', () => {
       ],
     });
 
-    assert.equal(snapshot.source, 'vwap_dva_snapshot_v2');
-    assert.equal(snapshot.schema_version, 'v2');
+    assert.equal(snapshot.source, 'vwap_dva_snapshot_v3');
+    assert.equal(snapshot.schema_version, 'v3');
     assert.equal(snapshot.dva.type, 'annual');
     assert.equal(snapshot.dva.anchor, 'Year');
     assert.equal(snapshot.dva.current.period_start.raw, 1767225600);
