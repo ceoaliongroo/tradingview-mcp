@@ -606,9 +606,17 @@ export function buildVwapDvaSnapshot({ symbol = null, resolution = null, studyVi
     : currentRow;
   const isDaily = resolution === 'D' || resolution === '1D';
 
+  const buildTimeInfo = time => time != null ? {
+    raw: time,
+    utc: formatBarTime(time)?.iso ?? null,
+    israel: formatBarTimeInZone(time, 'Asia/Jerusalem'),
+  } : null;
+
   const buildArea = (row, year) => row ? {
     bar_index: row.bar_index,
     time: row.time,
+    time_utc: formatBarTime(row.time)?.iso ?? null,
+    time_israel: formatBarTimeInZone(row.time, 'Asia/Jerusalem'),
     year: year ?? null,
     variables: row.variables,
     display_values: Object.fromEntries(Object.entries(row.variables).map(([key, value]) => [key, formatVwapDvaValue(value)])),
@@ -631,6 +639,9 @@ export function buildVwapDvaSnapshot({ symbol = null, resolution = null, studyVi
       current_period: currentPeriodRow ? {
         start_bar_index: currentPeriodRow.bar_index,
         start_time: currentPeriodRow.time,
+        start_time_utc: formatBarTime(currentPeriodRow.time)?.iso ?? null,
+        start_time_israel: formatBarTimeInZone(currentPeriodRow.time, 'Asia/Jerusalem'),
+        time_info: buildTimeInfo(currentPeriodRow.time),
         year: boundary ? boundary.current_year : null,
       } : null,
       current: buildArea(currentRow, boundary ? boundary.current_year : null),

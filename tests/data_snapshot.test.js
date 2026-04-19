@@ -253,10 +253,14 @@ describe('normalizeStudyInputs', () => {
     assert.equal(snapshot.dva.type, 'annual');
     assert.equal(snapshot.dva.anchor, 'Year');
     assert.equal(snapshot.dva.current_period.year, 2026);
+    assert.equal(snapshot.dva.current_period.start_time_utc, '2026-04-18T00:00:00.000Z');
+    assert.equal(snapshot.dva.current_period.start_time_israel, '2026-04-18 03:00');
     assert.equal(snapshot.dva.current.bar_index, 299);
     assert.equal(snapshot.dva.previous.bar_index, 191);
     assert.equal(snapshot.dva.current.variables.VWAP, 74316.01121211374);
     assert.equal(snapshot.dva.previous.variables.DVAH, 112554.21780299074);
     assert.equal(snapshot.dva.current.display_values.VWAP, '74,316.011212');
+    assert.equal(snapshot.dva.current.time_utc, '2026-04-18T00:00:00.000Z');
+    assert.equal(snapshot.dva.current.time_israel, '2026-04-18 03:00');
   });
 });
