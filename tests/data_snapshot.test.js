@@ -248,19 +248,24 @@ describe('normalizeStudyInputs', () => {
       ],
     });
 
-    assert.equal(snapshot.source, 'vwap_dva_snapshot_v1');
-    assert.equal(snapshot.schema_version, 'v1');
-    assert.equal(snapshot.dva.type, 'annual');
-    assert.equal(snapshot.dva.anchor, 'Year');
-    assert.equal(snapshot.dva.current_period.year, 2026);
-    assert.equal(snapshot.dva.current_period.start_time_utc, '2026-04-18T00:00:00.000Z');
-    assert.equal(snapshot.dva.current_period.start_time_israel, '2026-04-18 03:00');
-    assert.equal(snapshot.dva.current.bar_index, 299);
-    assert.equal(snapshot.dva.previous.bar_index, 191);
+    assert.equal(snapshot.source, 'vwap_dva_snapshot_v2');
+    assert.equal(snapshot.schema_version, 'v2');
+    assert.equal(snapshot.dva.type, 'quarterly');
+    assert.equal(snapshot.dva.anchor, 'Quarter');
+    assert.equal(snapshot.dva.current.period_start.raw, 1776470400);
+    assert.equal(snapshot.dva.current.period_start.utc, '2026-04-19T00:00:00.000Z');
+    assert.equal(snapshot.dva.current.period_start.israel, '2026-04-19 03:00');
+    assert.equal(snapshot.dva.current.period_end.raw, 1776470400);
+    assert.equal(snapshot.dva.current.period_end.utc, '2026-04-19T00:00:00.000Z');
+    assert.equal(snapshot.dva.previous.period_end.raw, 1767139200);
+    assert.equal(snapshot.dva.previous.period_end.utc, '2025-12-31T00:00:00.000Z');
+    assert.equal(snapshot.dva.previous.period_end.israel, '2025-12-31 02:00');
+    assert.equal(snapshot.dva.current.period_start_bar_index, 299);
+    assert.equal(snapshot.dva.previous.period_end_bar_index, 191);
     assert.equal(snapshot.dva.current.variables.VWAP, 74316.01121211374);
     assert.equal(snapshot.dva.previous.variables.DVAH, 112554.21780299074);
     assert.equal(snapshot.dva.current.display_values.VWAP, '74,316.011212');
-    assert.equal(snapshot.dva.current.time_utc, '2026-04-18T00:00:00.000Z');
-    assert.equal(snapshot.dva.current.time_israel, '2026-04-18 03:00');
+    assert.equal(snapshot.dva.current_value_row.time.utc, '2026-04-19T00:00:00.000Z');
+    assert.equal(snapshot.dva.current_value_row.time.israel, '2026-04-19 03:00');
   });
 });

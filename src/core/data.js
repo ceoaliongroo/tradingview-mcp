@@ -573,19 +573,92 @@ function formatVwapDvaValue(value) {
   return value.toLocaleString('en-US', { maximumFractionDigits: 6 });
 }
 
-function findVwapAnnualBoundary(rows) {
-  if (!Array.isArray(rows) || rows.length < 2) return null;
-  for (let i = 1; i < rows.length; i++) {
-    const prevTime = rows[i - 1]?.time;
-    const curTime = rows[i]?.time;
-    if (typeof prevTime !== 'number' || typeof curTime !== 'number') continue;
-    const prevYear = new Date(prevTime * 1000).getUTCFullYear();
-    const curYear = new Date(curTime * 1000).getUTCFullYear();
-    if (prevYear !== curYear) {
-      return { previous_index: i - 1, current_index: i, previous_year: prevYear, current_year: curYear };
+function getVwapDvaPeriodType(resolution) {
+  const token = String(resolution ?? '').toLowerCase();
+  if (token === '480' || token === '8h') return 'quarterly';
+  if (token === 'm' || token === '1m') return 'monthly';
+  if (token === 'w' || token === '1w') return 'weekly';
+  if (token === 'd' || token === '1d') return 'annual';
+  return null;
+}
+
+function getUtcIsoWeekParts(time) {
+  const date = new Date(time * 1000);
+  const utcDate = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const day = utcDate.getUTCDay() || 7;
+  utcDate.setUTCDate(utcDate.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(utcDate.getUTCFullYear(), 0, 1));
+  const week = Math.ceil((((utcDate - yearStart) / 86400000) + 1) / 7);
+  return { weekYear: utcDate.getUTCFullYear(), week };
+}
+
+function getVwapDvaPeriodKey(time, periodType) {
+  if (typeof time !== 'number' || !isFinite(time)) return null;
+  const date = new Date(time * 1000);
+  const year = date.getUTCFullYear();
+  const month = date.getUTCMonth() + 1;
+  if (periodType === 'annual') return `${year}`;
+  if (periodType === 'quarterly') return `${year}-Q${Math.floor(date.getUTCMonth() / 3) + 1}`;
+  if (periodType === 'monthly') return `${year}-${String(month).padStart(2, '0')}`;
+  if (periodType === 'weekly') {
+    const { weekYear, week } = getUtcIsoWeekParts(time);
+    return `${weekYear}-W${String(week).padStart(2, '0')}`;
+  }
+  return `${year}`;
+}
+
+function groupVwapDvaRows(rows, periodType) {
+  const grouped = [];
+  const sourceRows = Array.isArray(rows) ? rows.slice() : [];
+  sourceRows.sort((a, b) => {
+    const at = typeof a?.time === 'number' ? a.time : 0;
+    const bt = typeof b?.time === 'number' ? b.time : 0;
+    if (at !== bt) return at - bt;
+    const ai = typeof a?.bar_index === 'number' ? a.bar_index : 0;
+    const bi = typeof b?.bar_index === 'number' ? b.bar_index : 0;
+    return ai - bi;
+  });
+
+  for (const row of sourceRows) {
+    const key = getVwapDvaPeriodKey(row?.time, periodType);
+    if (!key) continue;
+    const last = grouped[grouped.length - 1];
+    if (!last || last.key !== key) {
+      grouped.push({ key, rows: [row] });
+    } else {
+      last.rows.push(row);
     }
   }
-  return null;
+  return grouped;
+}
+
+function buildVwapDvaTimeInfo(time) {
+  if (time == null) return null;
+  return {
+    raw: time,
+    utc: formatBarTime(time)?.iso ?? null,
+    israel: formatBarTimeInZone(time, 'Asia/Jerusalem'),
+  };
+}
+
+function buildVwapDvaArea(group, periodType) {
+  if (!group || !Array.isArray(group.rows) || group.rows.length === 0) return null;
+  const firstRow = group.rows[0];
+  const lastRow = group.rows[group.rows.length - 1];
+  const displayValues = {};
+  for (const [key, value] of Object.entries(lastRow.variables)) {
+    displayValues[key] = formatVwapDvaValue(value);
+  }
+  return {
+    period_type: periodType,
+    period_key: group.key,
+    period_start: buildVwapDvaTimeInfo(firstRow.time),
+    period_end: buildVwapDvaTimeInfo(lastRow.time),
+    period_start_bar_index: firstRow.bar_index ?? null,
+    period_end_bar_index: lastRow.bar_index ?? null,
+    variables: lastRow.variables,
+    display_values: displayValues,
+  };
 }
 
 export function buildVwapDvaSnapshot({ symbol = null, resolution = null, studyVisible = null, studyName = 'Vwap MantillaPB', rows = [], chartLastIndex = null } = {}) {
@@ -596,36 +669,18 @@ export function buildVwapDvaSnapshot({ symbol = null, resolution = null, studyVi
     if (decoded) normalizedRows.push(decoded);
   }
 
-  const currentRow = normalizedRows.length > 0 ? normalizedRows[normalizedRows.length - 1] : null;
-  const boundary = findVwapAnnualBoundary(normalizedRows);
-  const previousRow = boundary && boundary.previous_index != null
-    ? normalizedRows[boundary.previous_index]
-    : (normalizedRows.length > 1 ? normalizedRows[normalizedRows.length - 2] : null);
-  const currentPeriodRow = boundary && boundary.current_index != null
-    ? normalizedRows[boundary.current_index]
-    : currentRow;
-  const isDaily = resolution === 'D' || resolution === '1D';
+  const periodType = getVwapDvaPeriodType(resolution);
+  const groupedRows = groupVwapDvaRows(normalizedRows, periodType);
+  const currentGroup = groupedRows.length > 0 ? groupedRows[groupedRows.length - 1] : null;
+  const previousGroup = groupedRows.length > 1 ? groupedRows[groupedRows.length - 2] : null;
 
-  const buildTimeInfo = time => time != null ? {
-    raw: time,
-    utc: formatBarTime(time)?.iso ?? null,
-    israel: formatBarTimeInZone(time, 'Asia/Jerusalem'),
-  } : null;
-
-  const buildArea = (row, year) => row ? {
-    bar_index: row.bar_index,
-    time: row.time,
-    time_utc: formatBarTime(row.time)?.iso ?? null,
-    time_israel: formatBarTimeInZone(row.time, 'Asia/Jerusalem'),
-    year: year ?? null,
-    variables: row.variables,
-    display_values: Object.fromEntries(Object.entries(row.variables).map(([key, value]) => [key, formatVwapDvaValue(value)])),
-  } : null;
+  const currentRow = currentGroup?.rows?.[currentGroup.rows.length - 1] ?? (normalizedRows.length > 0 ? normalizedRows[normalizedRows.length - 1] : null);
+  const previousRow = previousGroup?.rows?.[previousGroup.rows.length - 1] ?? (normalizedRows.length > 1 ? normalizedRows[normalizedRows.length - 2] : null);
 
   return {
     success: true,
-    source: 'vwap_dva_snapshot_v1',
-    schema_version: 'v1',
+    source: 'vwap_dva_snapshot_v2',
+    schema_version: 'v2',
     symbol,
     resolution,
     chart_last_index: chartLastIndex,
@@ -634,18 +689,20 @@ export function buildVwapDvaSnapshot({ symbol = null, resolution = null, studyVi
       visible: studyVisible,
     },
     dva: {
-      type: isDaily ? 'annual' : null,
-      anchor: isDaily ? 'Year' : null,
-      current_period: currentPeriodRow ? {
-        start_bar_index: currentPeriodRow.bar_index,
-        start_time: currentPeriodRow.time,
-        start_time_utc: formatBarTime(currentPeriodRow.time)?.iso ?? null,
-        start_time_israel: formatBarTimeInZone(currentPeriodRow.time, 'Asia/Jerusalem'),
-        time_info: buildTimeInfo(currentPeriodRow.time),
-        year: boundary ? boundary.current_year : null,
+      type: periodType,
+      anchor: periodType === 'annual' ? 'Year' : periodType === 'quarterly' ? 'Quarter' : periodType === 'monthly' ? 'Month' : periodType === 'weekly' ? 'Week' : null,
+      current: buildVwapDvaArea(currentGroup, periodType),
+      previous: buildVwapDvaArea(previousGroup, periodType),
+      current_value_row: currentRow ? {
+        bar_index: currentRow.bar_index,
+        time: buildVwapDvaTimeInfo(currentRow.time),
+        variables: currentRow.variables,
       } : null,
-      current: buildArea(currentRow, boundary ? boundary.current_year : null),
-      previous: buildArea(previousRow, boundary ? boundary.previous_year : null),
+      previous_value_row: previousRow ? {
+        bar_index: previousRow.bar_index,
+        time: buildVwapDvaTimeInfo(previousRow.time),
+        variables: previousRow.variables,
+      } : null,
     },
   };
 }
@@ -1474,6 +1531,103 @@ export async function getStudyValues() {
         return null;
       }
 
+      function getPeriodType(resolution) {
+        var token = String(resolution || '').toLowerCase();
+        if (token === '480' || token === '8h') return 'quarterly';
+        if (token === 'm' || token === '1m') return 'monthly';
+        if (token === 'w' || token === '1w') return 'weekly';
+        if (token === 'd' || token === '1d') return 'annual';
+        return null;
+      }
+
+      function getIsoWeekParts(time) {
+        var date = new Date(time * 1000);
+        var utcDate = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+        var day = utcDate.getUTCDay() || 7;
+        utcDate.setUTCDate(utcDate.getUTCDate() + 4 - day);
+        var yearStart = new Date(Date.UTC(utcDate.getUTCFullYear(), 0, 1));
+        var week = Math.ceil((((utcDate - yearStart) / 86400000) + 1) / 7);
+        return { weekYear: utcDate.getUTCFullYear(), week: week };
+      }
+
+      function getPeriodKey(time, periodType) {
+        if (typeof time !== 'number' || !isFinite(time)) return null;
+        var date = new Date(time * 1000);
+        var year = date.getUTCFullYear();
+        if (periodType === 'annual') return String(year);
+        if (periodType === 'quarterly') return year + '-Q' + (Math.floor(date.getUTCMonth() / 3) + 1);
+        if (periodType === 'monthly') return year + '-' + String(date.getUTCMonth() + 1).padStart(2, '0');
+        if (periodType === 'weekly') {
+          var parts = getIsoWeekParts(time);
+          return parts.weekYear + '-W' + String(parts.week).padStart(2, '0');
+        }
+        return String(year);
+      }
+
+      function groupRowsByPeriod(rows, periodType) {
+        var grouped = [];
+        var source = Array.isArray(rows) ? rows.slice() : [];
+        source.sort(function(a, b) {
+          var at = typeof a.time === 'number' ? a.time : 0;
+          var bt = typeof b.time === 'number' ? b.time : 0;
+          if (at !== bt) return at - bt;
+          var ai = typeof a.bar_index === 'number' ? a.bar_index : 0;
+          var bi = typeof b.bar_index === 'number' ? b.bar_index : 0;
+          return ai - bi;
+        });
+        for (var i = 0; i < source.length; i++) {
+          var row = source[i];
+          var key = getPeriodKey(row.time, periodType);
+          if (!key) continue;
+          var last = grouped[grouped.length - 1];
+          if (!last || last.key !== key) grouped.push({ key: key, rows: [row] });
+          else last.rows.push(row);
+        }
+        return grouped;
+      }
+
+      function buildTimeInfo(time) {
+        if (time == null) return null;
+        return {
+          raw: time,
+          utc: new Date((time > 1000000000000 ? time : time * 1000)).toISOString(),
+          israel: (function() {
+            var formatter = new Intl.DateTimeFormat('en-CA', {
+              timeZone: 'Asia/Jerusalem',
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false,
+            });
+            var parts = formatter.formatToParts(new Date((time > 1000000000000 ? time : time * 1000)));
+            var lookup = {};
+            for (var i = 0; i < parts.length; i++) lookup[parts[i].type] = parts[i].value;
+            if (!lookup.year || !lookup.month || !lookup.day || !lookup.hour || !lookup.minute) return null;
+            return lookup.year + '-' + lookup.month + '-' + lookup.day + ' ' + lookup.hour + ':' + lookup.minute;
+          })(),
+        };
+      }
+
+      function buildArea(group, periodType) {
+        if (!group || !Array.isArray(group.rows) || group.rows.length === 0) return null;
+        var firstRow = group.rows[0];
+        var lastRow = group.rows[group.rows.length - 1];
+        return {
+          period_type: periodType,
+          period_key: group.key,
+          period_start: buildTimeInfo(firstRow.time),
+          period_end: buildTimeInfo(lastRow.time),
+          period_start_bar_index: firstRow.bar_index,
+          period_end_bar_index: lastRow.bar_index,
+          variables: lastRow.variables,
+          display_values: Object.fromEntries(Object.entries(lastRow.variables).map(function(entry) {
+            return [entry[0], formatDecodedValues({ variables: { [entry[0]]: entry[1] } })[entry[0]]];
+          })),
+        };
+      }
+
       var results = [];
       for (var si = 0; si < sources.length; si++) {
         var s = sources[si];
@@ -1507,32 +1661,27 @@ export async function getStudyValues() {
               }
             } catch(e) {}
 
-            var currentRow = rows.length > 0 ? rows[rows.length - 1] : null;
-            var boundary = findAnnualBoundary(rows);
-            var previousRow = boundary && boundary.previous_index != null ? rows[boundary.previous_index] : (rows.length > 1 ? rows[rows.length - 2] : null);
-            var currentPeriodRow = boundary && boundary.current_index != null ? rows[boundary.current_index] : currentRow;
-            var dailyResolution = resolution === 'D' || resolution === '1D';
+            var periodType = getPeriodType(resolution);
+            var groupedRows = groupRowsByPeriod(rows, periodType);
+            var currentGroup = groupedRows.length > 0 ? groupedRows[groupedRows.length - 1] : null;
+            var previousGroup = groupedRows.length > 1 ? groupedRows[groupedRows.length - 2] : null;
+            var currentRow = currentGroup && currentGroup.rows.length > 0 ? currentGroup.rows[currentGroup.rows.length - 1] : (rows.length > 0 ? rows[rows.length - 1] : null);
+            var previousRow = previousGroup && previousGroup.rows.length > 0 ? previousGroup.rows[previousGroup.rows.length - 1] : (rows.length > 1 ? rows[rows.length - 2] : null);
 
             result.dva = {
-              type: dailyResolution ? 'annual' : null,
-              anchor: dailyResolution ? 'Year' : null,
-              current_period: currentPeriodRow ? {
-                start_bar_index: currentPeriodRow.bar_index,
-                start_time: currentPeriodRow.time,
-                year: boundary ? boundary.current_year : null,
-              } : null,
-              current: currentRow ? {
+              type: periodType,
+              anchor: periodType === 'annual' ? 'Year' : periodType === 'quarterly' ? 'Quarter' : periodType === 'monthly' ? 'Month' : periodType === 'weekly' ? 'Week' : null,
+              current: buildArea(currentGroup, periodType),
+              previous: buildArea(previousGroup, periodType),
+              current_value_row: currentRow ? {
                 bar_index: currentRow.bar_index,
-                time: currentRow.time,
+                time: buildTimeInfo(currentRow.time),
                 variables: currentRow.variables,
-                display_values: formatDecodedValues(currentRow),
               } : null,
-              previous: previousRow ? {
+              previous_value_row: previousRow ? {
                 bar_index: previousRow.bar_index,
-                time: previousRow.time,
-                year: boundary ? boundary.previous_year : null,
+                time: buildTimeInfo(previousRow.time),
                 variables: previousRow.variables,
-                display_values: formatDecodedValues(previousRow),
               } : null,
             };
           }
