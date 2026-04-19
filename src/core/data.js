@@ -607,6 +607,44 @@ function getVwapDvaPeriodKey(time, periodType) {
   return `${year}`;
 }
 
+function getVwapDvaPeriodStartTime(periodKey, periodType) {
+  if (!periodKey) return null;
+  if (periodType === 'annual') {
+    const year = Number(periodKey);
+    if (!Number.isFinite(year)) return null;
+    return Date.UTC(year, 0, 1) / 1000;
+  }
+  if (periodType === 'quarterly') {
+    const match = String(periodKey).match(/^(\d{4})-Q([1-4])$/);
+    if (!match) return null;
+    const year = Number(match[1]);
+    const quarter = Number(match[2]);
+    return Date.UTC(year, (quarter - 1) * 3, 1) / 1000;
+  }
+  if (periodType === 'monthly') {
+    const match = String(periodKey).match(/^(\d{4})-(\d{2})$/);
+    if (!match) return null;
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    return Date.UTC(year, month - 1, 1) / 1000;
+  }
+  if (periodType === 'weekly') {
+    const match = String(periodKey).match(/^(\d{4})-W(\d{2})$/);
+    if (!match) return null;
+    const year = Number(match[1]);
+    const week = Number(match[2]);
+    if (!Number.isFinite(year) || !Number.isFinite(week)) return null;
+    const jan4 = new Date(Date.UTC(year, 0, 4));
+    const day = jan4.getUTCDay() || 7;
+    const mondayWeek1 = new Date(jan4);
+    mondayWeek1.setUTCDate(jan4.getUTCDate() - (day - 1));
+    const start = new Date(mondayWeek1);
+    start.setUTCDate(mondayWeek1.getUTCDate() + (week - 1) * 7);
+    return start.getTime() / 1000;
+  }
+  return null;
+}
+
 function groupVwapDvaRows(rows, periodType) {
   const grouped = [];
   const sourceRows = Array.isArray(rows) ? rows.slice() : [];
@@ -649,10 +687,11 @@ function buildVwapDvaArea(group, periodType) {
   for (const [key, value] of Object.entries(lastRow.variables)) {
     displayValues[key] = formatVwapDvaValue(value);
   }
+  const periodStartTime = getVwapDvaPeriodStartTime(group.key, periodType);
   return {
     period_type: periodType,
     period_key: group.key,
-    period_start: buildVwapDvaTimeInfo(firstRow.time),
+    period_start: buildVwapDvaTimeInfo(periodStartTime ?? firstRow.time),
     period_end: buildVwapDvaTimeInfo(lastRow.time),
     period_start_bar_index: firstRow.bar_index ?? null,
     period_end_bar_index: lastRow.bar_index ?? null,
