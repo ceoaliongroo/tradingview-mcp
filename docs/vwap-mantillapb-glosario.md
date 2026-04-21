@@ -7,6 +7,7 @@ Read it before changing the Pine for this indicator.
 
 - `DVA` = Development Value Area, or `area de valor en desarrollo actual`.
 - `PVA` = Previous Value Area, or `area de valor previa`.
+- `anchor` = snapshot anchor. This is the term we use in conversation when we refer to the effective timeframe/anchor that determines the DVA mode.
 - If a term here does not match the exact Pine variable name, this glossary defines the meaning.
 
 ## Core concepts

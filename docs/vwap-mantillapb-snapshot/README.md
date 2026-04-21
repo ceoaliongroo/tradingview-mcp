@@ -9,6 +9,11 @@ This folder documents the current version of the `Vwap MantillaPB` DVA snapshot 
 - Primary MCP tool: `data_get_dva_snapshot`
 - Source of truth: the active TradingView Desktop chart
 
+## Terminology
+
+- `anchor` is the term we use for the snapshot period identifier.
+- When you mention a timeframe for `Vwap MantillaPB`, interpret it in terms of the anchor unless the context explicitly says otherwise.
+
 ## Scope
 
 This snapshot is meant to return the current and previous Development Value Area values for the active chart timeframe.
