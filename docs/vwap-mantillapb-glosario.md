@@ -31,6 +31,7 @@ Read it before changing the Pine for this indicator.
 - `8h` charts map to `Quarter` and use `quarterColor` (`#FFA500`).
 - `2h` charts map to `Month` and use `monthColor` (`#00FFFF`).
 - `30m` charts map to `Week` and use `weekColor` (`#FC4AAC`).
+- In snapshot version `v7`, `1M` / `M` use the `Decade` anchor and `1W` / `W` use the `HalfDecade` anchor. The `2h` and `30m` mappings remain `Month` and `Week`.
 - `5m` charts map to `Session` and use `sessionColor` (`#FFFF00`).
 - The Pine source resolves this with timeframe flags, not raw strings, so `D` and `1D` behave the same.
 - In the current indicator, `Session` is the internal label used for the `5m` timeframe that represents the daily-period view.

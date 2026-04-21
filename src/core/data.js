@@ -577,9 +577,19 @@ function getVwapDvaPeriodType(resolution) {
   const token = String(resolution ?? '').toLowerCase();
   if (token === '480' || token === '8h') return 'quarterly';
   if (token === '120' || token === '2h') return 'monthly';
+  if (token === '30' || token === '30m') return 'weekly';
   if (token === 'm' || token === '1m') return 'monthly';
   if (token === 'w' || token === '1w') return 'weekly';
   if (token === 'd' || token === '1d') return 'annual';
+  return null;
+}
+
+function getVwapDvaAnchorLabel(resolution, periodType) {
+  const token = String(resolution ?? '').toLowerCase();
+  if (periodType === 'annual') return 'Year';
+  if (periodType === 'quarterly') return 'Quarter';
+  if (periodType === 'monthly') return token === 'm' || token === '1m' ? 'Decade' : 'Month';
+  if (periodType === 'weekly') return token === 'w' || token === '1w' ? 'HalfDecade' : 'Week';
   return null;
 }
 
@@ -719,8 +729,8 @@ export function buildVwapDvaSnapshot({ symbol = null, resolution = null, studyVi
 
   return {
     success: true,
-    source: 'vwap_dva_snapshot_v5',
-    schema_version: 'v5',
+    source: 'vwap_dva_snapshot_v7',
+    schema_version: 'v7',
     symbol,
     resolution,
     chart_last_index: chartLastIndex,
@@ -730,7 +740,7 @@ export function buildVwapDvaSnapshot({ symbol = null, resolution = null, studyVi
     },
     dva: {
       type: periodType,
-      anchor: periodType === 'annual' ? 'Year' : periodType === 'quarterly' ? 'Quarter' : periodType === 'monthly' ? 'Month' : periodType === 'weekly' ? 'Week' : null,
+      anchor: getVwapDvaAnchorLabel(resolution, periodType),
       current: buildVwapDvaArea(currentGroup, periodType),
       previous: buildVwapDvaArea(previousGroup, periodType),
       current_value_row: currentRow ? {
@@ -1574,6 +1584,7 @@ export async function getStudyValues() {
       function getPeriodType(resolution) {
         var token = String(resolution || '').toLowerCase();
         if (token === '480' || token === '8h') return 'quarterly';
+        if (token === '30' || token === '30m') return 'weekly';
         if (token === 'm' || token === '1m') return 'monthly';
         if (token === 'w' || token === '1w') return 'weekly';
         if (token === 'd' || token === '1d') return 'annual';
@@ -1707,10 +1718,17 @@ export async function getStudyValues() {
             var previousGroup = groupedRows.length > 1 ? groupedRows[groupedRows.length - 2] : null;
             var currentRow = currentGroup && currentGroup.rows.length > 0 ? currentGroup.rows[currentGroup.rows.length - 1] : (rows.length > 0 ? rows[rows.length - 1] : null);
             var previousRow = previousGroup && previousGroup.rows.length > 0 ? previousGroup.rows[previousGroup.rows.length - 1] : (rows.length > 1 ? rows[rows.length - 2] : null);
+            var resolutionToken = String(resolution || '').toLowerCase();
 
             result.dva = {
               type: periodType,
-              anchor: periodType === 'annual' ? 'Year' : periodType === 'quarterly' ? 'Quarter' : periodType === 'monthly' ? 'Month' : periodType === 'weekly' ? 'Week' : null,
+              anchor: (function() {
+                if (periodType === 'annual') return 'Year';
+                if (periodType === 'quarterly') return 'Quarter';
+                if (periodType === 'monthly') return resolutionToken === 'm' || resolutionToken === '1m' ? 'Decade' : 'Month';
+                if (periodType === 'weekly') return resolutionToken === 'w' || resolutionToken === '1w' ? 'HalfDecade' : 'Week';
+                return null;
+              })(),
               current: buildArea(currentGroup, periodType),
               previous: buildArea(previousGroup, periodType),
               current_value_row: currentRow ? {
