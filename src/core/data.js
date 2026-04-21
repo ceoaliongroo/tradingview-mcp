@@ -576,6 +576,7 @@ function formatVwapDvaValue(value) {
 function getVwapDvaPeriodType(resolution) {
   const token = String(resolution ?? '').toLowerCase();
   if (token === '480' || token === '8h') return 'quarterly';
+  if (token === '120' || token === '2h') return 'monthly';
   if (token === 'm' || token === '1m') return 'monthly';
   if (token === 'w' || token === '1w') return 'weekly';
   if (token === 'd' || token === '1d') return 'annual';
@@ -718,8 +719,8 @@ export function buildVwapDvaSnapshot({ symbol = null, resolution = null, studyVi
 
   return {
     success: true,
-    source: 'vwap_dva_snapshot_v3',
-    schema_version: 'v3',
+    source: 'vwap_dva_snapshot_v5',
+    schema_version: 'v5',
     symbol,
     resolution,
     chart_last_index: chartLastIndex,

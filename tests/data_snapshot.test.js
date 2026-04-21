@@ -273,4 +273,90 @@ describe('normalizeStudyInputs', () => {
     assert.equal(snapshot.dva.current_value_row.time.utc, '2026-04-19T00:00:00.000Z');
     assert.equal(snapshot.dva.current_value_row.time.israel, '2026-04-19 03:00');
   });
+
+  it('treats 2h as monthly for the DVA snapshot versioned output', () => {
+    const snapshot = buildVwapDvaSnapshot({
+      symbol: 'BATS:AAPL',
+      resolution: '120',
+      chartLastIndex: 299,
+      studyVisible: true,
+      rows: [
+        {
+          index: -293,
+          value: [
+            1767222000,
+            276.40011897555064,
+            4283585279,
+            280.989554341645,
+            866689954,
+            271.8106836094563,
+            866689954,
+            285.5789897077393,
+            866689954,
+            267.22124824336197,
+            866689954,
+            290.16842507383365,
+            866689954,
+            262.63181287726763,
+            866689954,
+            278.6948366585978,
+            2158535586,
+            274.1054012925035,
+            2158535586,
+            283.28427202469214,
+            11051938,
+            269.51596592640914,
+            11051938,
+            866689954,
+            866689954,
+            866689954,
+          ],
+        },
+        {
+          index: 299,
+          value: [
+            1776722400,
+            260.20002047165747,
+            4283585279,
+            266.68774218371306,
+            866689954,
+            253.7122987596019,
+            866689954,
+            273.1754638957686,
+            866689954,
+            247.22457704754635,
+            866689954,
+            279.6631856078242,
+            866689954,
+            240.73685533549076,
+            866689954,
+            263.4438813276853,
+            2158535586,
+            256.9561596156297,
+            2158535586,
+            269.9316030397408,
+            11051938,
+            250.4684379035741,
+            11051938,
+            866689954,
+            866689954,
+            866689954,
+          ],
+        },
+      ],
+    });
+
+    assert.equal(snapshot.source, 'vwap_dva_snapshot_v5');
+    assert.equal(snapshot.schema_version, 'v5');
+    assert.equal(snapshot.dva.type, 'monthly');
+    assert.equal(snapshot.dva.anchor, 'Month');
+    assert.equal(snapshot.dva.current.period_key, '2026-04');
+    assert.equal(snapshot.dva.current.period_start.utc, '2026-04-01T00:00:00.000Z');
+    assert.equal(snapshot.dva.previous.period_key, '2025-12');
+    assert.equal(snapshot.dva.previous.period_end.utc, '2025-12-31T23:00:00.000Z');
+    assert.equal(snapshot.dva.current_value_row.time.utc, '2026-04-20T22:00:00.000Z');
+    assert.equal(snapshot.dva.previous_value_row.time.utc, '2025-12-31T23:00:00.000Z');
+    assert.equal(snapshot.dva.current.variables.VWAP, 260.20002047165747);
+    assert.equal(snapshot.dva.previous.variables.DVAH, 280.989554341645);
+  });
 });
