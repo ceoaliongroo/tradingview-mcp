@@ -593,6 +593,53 @@ function getVwapDvaAnchorLabel(resolution, periodType) {
   return null;
 }
 
+function getVwapDvaDominanceRule(anchor) {
+  switch (anchor) {
+    case 'Week':
+      return { label: 'previous dominates the first day of the period, then current dominates', duration: { days: 1 } };
+    case 'Month':
+      return { label: 'previous dominates the first week of the period, then current dominates', duration: { days: 7 } };
+    case 'Quarter':
+      return { label: 'previous dominates the first month of the period, then current dominates', duration: { months: 1 } };
+    case 'Year':
+      return { label: 'previous dominates the first quarter of the period, then current dominates', duration: { months: 3 } };
+    case 'HalfDecade':
+      return { label: 'previous dominates the first year of the period, then current dominates', duration: { years: 1 } };
+    case 'Decade':
+      return { label: 'previous dominates the first two years of the period, then current dominates', duration: { years: 2 } };
+    default:
+      return null;
+  }
+}
+
+function getVwapDvaAnchorSpan(anchor) {
+  switch (anchor) {
+    case 'Week':
+      return { days: 7 };
+    case 'Month':
+      return { months: 1 };
+    case 'Quarter':
+      return { months: 3 };
+    case 'Year':
+      return { years: 1 };
+    case 'HalfDecade':
+      return { years: 5 };
+    case 'Decade':
+      return { years: 10 };
+    default:
+      return null;
+  }
+}
+
+function addUtcDuration(time, { days = 0, months = 0, years = 0 } = {}) {
+  if (typeof time !== 'number' || !Number.isFinite(time)) return null;
+  const date = new Date(time * 1000);
+  if (years) date.setUTCFullYear(date.getUTCFullYear() + years);
+  if (months) date.setUTCMonth(date.getUTCMonth() + months);
+  if (days) date.setUTCDate(date.getUTCDate() + days);
+  return Math.floor(date.getTime() / 1000);
+}
+
 function getUtcIsoWeekParts(time) {
   const date = new Date(time * 1000);
   const utcDate = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
@@ -711,6 +758,35 @@ function buildVwapDvaArea(group, periodType) {
   };
 }
 
+function buildVwapDvaDominantArea({ anchor = null, currentArea = null, currentValueRow = null } = {}) {
+  if (!currentArea || !currentArea.period_start || !currentArea.period_end) return null;
+  const rule = getVwapDvaDominanceRule(anchor);
+  if (!rule) return null;
+  const anchorSpan = getVwapDvaAnchorSpan(anchor);
+  if (!anchorSpan) return null;
+  const switchAt = addUtcDuration(currentArea.period_start.raw, rule.duration);
+  const anchorEnd = addUtcDuration(currentArea.period_start.raw, anchorSpan);
+  if (switchAt == null) return null;
+  const currentTime = typeof currentValueRow?.time?.raw === 'number' ? currentValueRow.time.raw : null;
+  const activeSide = currentTime != null && currentTime < switchAt ? 'previous' : 'current';
+
+  return {
+    anchor,
+    active_side: activeSide,
+    active_label: activeSide === 'previous' ? 'PVA' : 'DVA',
+    rule: rule.label,
+    switch_at: buildVwapDvaTimeInfo(switchAt),
+    previous_window: {
+      start: currentArea.period_start,
+      end: buildVwapDvaTimeInfo(switchAt),
+    },
+    current_window: {
+      start: buildVwapDvaTimeInfo(switchAt),
+      end: buildVwapDvaTimeInfo(anchorEnd ?? currentArea.period_end.raw),
+    },
+  };
+}
+
 export function buildVwapDvaSnapshot({ symbol = null, resolution = null, studyVisible = null, studyName = 'Vwap MantillaPB', rows = [], chartLastIndex = null } = {}) {
   const normalizedRows = [];
   const sourceRows = Array.isArray(rows) ? rows : [];
@@ -723,14 +799,25 @@ export function buildVwapDvaSnapshot({ symbol = null, resolution = null, studyVi
   const groupedRows = groupVwapDvaRows(normalizedRows, periodType);
   const currentGroup = groupedRows.length > 0 ? groupedRows[groupedRows.length - 1] : null;
   const previousGroup = groupedRows.length > 1 ? groupedRows[groupedRows.length - 2] : null;
+  const currentArea = buildVwapDvaArea(currentGroup, periodType);
+  const previousArea = buildVwapDvaArea(previousGroup, periodType);
 
   const currentRow = currentGroup?.rows?.[currentGroup.rows.length - 1] ?? (normalizedRows.length > 0 ? normalizedRows[normalizedRows.length - 1] : null);
   const previousRow = previousGroup?.rows?.[previousGroup.rows.length - 1] ?? (normalizedRows.length > 1 ? normalizedRows[normalizedRows.length - 2] : null);
+  const dominantArea = buildVwapDvaDominantArea({
+    anchor: getVwapDvaAnchorLabel(resolution, periodType),
+    currentArea,
+    currentValueRow: currentRow ? {
+      bar_index: currentRow.bar_index,
+      time: buildVwapDvaTimeInfo(currentRow.time),
+      variables: currentRow.variables,
+    } : null,
+  });
 
   return {
     success: true,
-    source: 'vwap_dva_snapshot_v7',
-    schema_version: 'v7',
+    source: 'vwap_dva_snapshot_v8',
+    schema_version: 'v8',
     symbol,
     resolution,
     chart_last_index: chartLastIndex,
@@ -741,8 +828,9 @@ export function buildVwapDvaSnapshot({ symbol = null, resolution = null, studyVi
     dva: {
       type: periodType,
       anchor: getVwapDvaAnchorLabel(resolution, periodType),
-      current: buildVwapDvaArea(currentGroup, periodType),
-      previous: buildVwapDvaArea(previousGroup, periodType),
+      current: currentArea,
+      previous: previousArea,
+      dominant_area: dominantArea,
       current_value_row: currentRow ? {
         bar_index: currentRow.bar_index,
         time: buildVwapDvaTimeInfo(currentRow.time),

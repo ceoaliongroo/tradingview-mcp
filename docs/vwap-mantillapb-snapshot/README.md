@@ -4,8 +4,8 @@ This folder documents the current version of the `Vwap MantillaPB` DVA snapshot 
 
 ## Current version
 
-- `schema_version`: `v7`
-- `source`: `vwap_dva_snapshot_v7`
+- `schema_version`: `v8`
+- `source`: `vwap_dva_snapshot_v8`
 - Primary MCP tool: `data_get_dva_snapshot`
 - Source of truth: the active TradingView Desktop chart
 
@@ -40,8 +40,8 @@ The current snapshot shape is:
 ```json
 {
   "success": true,
-  "source": "vwap_dva_snapshot_v7",
-  "schema_version": "v7",
+  "source": "vwap_dva_snapshot_v8",
+  "schema_version": "v8",
   "symbol": "STRING",
   "resolution": "STRING",
   "chart_last_index": 0,
@@ -112,6 +112,41 @@ The current snapshot shape is:
       "variables": {},
       "display_values": {}
     },
+    "dominant_area": {
+      "anchor": "Year | Quarter | Month | Decade | Week | HalfDecade",
+      "active_side": "previous | current",
+      "active_label": "PVA | DVA",
+      "rule": "STRING",
+      "switch_at": {
+        "raw": 0,
+        "utc": "ISO-8601",
+        "israel": "YYYY-MM-DD HH:mm"
+      },
+      "previous_window": {
+        "start": {
+          "raw": 0,
+          "utc": "ISO-8601",
+          "israel": "YYYY-MM-DD HH:mm"
+        },
+        "end": {
+          "raw": 0,
+          "utc": "ISO-8601",
+          "israel": "YYYY-MM-DD HH:mm"
+        }
+      },
+      "current_window": {
+        "start": {
+          "raw": 0,
+          "utc": "ISO-8601",
+          "israel": "YYYY-MM-DD HH:mm"
+        },
+        "end": {
+          "raw": 0,
+          "utc": "ISO-8601",
+          "israel": "YYYY-MM-DD HH:mm"
+        }
+      }
+    },
     "current_value_row": {
       "bar_index": 0,
       "time": {
@@ -142,12 +177,23 @@ The current snapshot shape is:
 - `previous_value_row` is the last bar of the previous completed period.
 - `period_start` and `period_end` are calendar boundaries for the relevant DVA period.
 - `period_start_bar_index` and `period_end_bar_index` are the bar indexes used to anchor the snapshot on TradingView.
+- `dominant_area` tells you which area is currently in control for the active anchor window and where the switch happens.
 
 ## Version notes
 
-### `v7`
+### `v8`
 
 Current baseline.
+
+Changes included in this version:
+
+- `dominant_area` was added to the snapshot.
+- `1D`, `8h`, `2h`, `30m`, `1M`, and `1W` keep their existing type mappings.
+- The snapshot now exposes the active dominant side plus the switch window for the current anchor.
+
+### `v7`
+
+Previous baseline.
 
 Changes included in this version:
 

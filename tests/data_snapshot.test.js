@@ -248,8 +248,8 @@ describe('normalizeStudyInputs', () => {
       ],
     });
 
-    assert.equal(snapshot.source, 'vwap_dva_snapshot_v7');
-    assert.equal(snapshot.schema_version, 'v7');
+    assert.equal(snapshot.source, 'vwap_dva_snapshot_v8');
+    assert.equal(snapshot.schema_version, 'v8');
     assert.equal(snapshot.dva.type, 'annual');
     assert.equal(snapshot.dva.anchor, 'Year');
     assert.equal(snapshot.dva.current.period_start.raw, 1767225600);
@@ -346,8 +346,8 @@ describe('normalizeStudyInputs', () => {
       ],
     });
 
-    assert.equal(snapshot.source, 'vwap_dva_snapshot_v7');
-    assert.equal(snapshot.schema_version, 'v7');
+    assert.equal(snapshot.source, 'vwap_dva_snapshot_v8');
+    assert.equal(snapshot.schema_version, 'v8');
     assert.equal(snapshot.dva.type, 'monthly');
     assert.equal(snapshot.dva.anchor, 'Month');
     assert.equal(snapshot.dva.current.period_key, '2026-04');
@@ -434,8 +434,8 @@ describe('normalizeStudyInputs', () => {
       ],
     });
 
-    assert.equal(snapshot.source, 'vwap_dva_snapshot_v7');
-    assert.equal(snapshot.schema_version, 'v7');
+    assert.equal(snapshot.source, 'vwap_dva_snapshot_v8');
+    assert.equal(snapshot.schema_version, 'v8');
     assert.equal(snapshot.dva.type, 'weekly');
     assert.equal(snapshot.dva.anchor, 'Week');
     assert.equal(snapshot.dva.current.period_key, '2026-W16');
@@ -520,8 +520,8 @@ describe('normalizeStudyInputs', () => {
       ],
     });
 
-    assert.equal(snapshot.source, 'vwap_dva_snapshot_v7');
-    assert.equal(snapshot.schema_version, 'v7');
+    assert.equal(snapshot.source, 'vwap_dva_snapshot_v8');
+    assert.equal(snapshot.schema_version, 'v8');
     assert.equal(snapshot.dva.type, 'monthly');
     assert.equal(snapshot.dva.anchor, 'Decade');
   });
@@ -598,9 +598,92 @@ describe('normalizeStudyInputs', () => {
       ],
     });
 
-    assert.equal(snapshot.source, 'vwap_dva_snapshot_v7');
-    assert.equal(snapshot.schema_version, 'v7');
+    assert.equal(snapshot.source, 'vwap_dva_snapshot_v8');
+    assert.equal(snapshot.schema_version, 'v8');
     assert.equal(snapshot.dva.type, 'weekly');
     assert.equal(snapshot.dva.anchor, 'HalfDecade');
+  });
+
+  it('adds a dominant area window for quarterly anchors', () => {
+    const snapshot = buildVwapDvaSnapshot({
+      symbol: 'BATS:AAPL',
+      resolution: '8h',
+      chartLastIndex: 299,
+      studyVisible: true,
+      rows: [
+        {
+          index: 152,
+          value: [
+            1767225600,
+            261.12234811558164,
+            4283585279,
+            269.8271438867708,
+            866689954,
+            252.41755234439248,
+            866689954,
+            278.53193965796,
+            866689954,
+            243.71275657320334,
+            866689954,
+            287.2367354291491,
+            866689954,
+            235.00796080201417,
+            866689954,
+            265.4747460011762,
+            2158535586,
+            256.76995022998705,
+            2158535586,
+            274.1795417723654,
+            11051938,
+            248.0651544587979,
+            11051938,
+            866689954,
+            866689954,
+            866689954,
+          ],
+        },
+        {
+          index: 299,
+          value: [
+            1776700800,
+            260.4453201814728,
+            4283585279,
+            266.43719927656775,
+            866689954,
+            254.4534410863779,
+            866689954,
+            272.4290783716627,
+            866689954,
+            248.461561991283,
+            866689954,
+            278.42095746675756,
+            866689954,
+            242.46968289618806,
+            866689954,
+            263.4412597290203,
+            2158535586,
+            257.44938063392533,
+            2158535586,
+            269.4331388241152,
+            11051938,
+            251.45750153883046,
+            11051938,
+            866689954,
+            866689954,
+            866689954,
+          ],
+        },
+      ],
+    });
+
+    assert.equal(snapshot.source, 'vwap_dva_snapshot_v8');
+    assert.equal(snapshot.schema_version, 'v8');
+    assert.equal(snapshot.dva.type, 'quarterly');
+    assert.equal(snapshot.dva.anchor, 'Quarter');
+    assert.equal(snapshot.dva.dominant_area.active_side, 'previous');
+    assert.equal(snapshot.dva.dominant_area.switch_at.utc, '2026-05-01T00:00:00.000Z');
+    assert.equal(snapshot.dva.dominant_area.previous_window.end.utc, '2026-05-01T00:00:00.000Z');
+    assert.equal(snapshot.dva.dominant_area.current_window.start.utc, '2026-05-01T00:00:00.000Z');
+    assert.equal(snapshot.dva.dominant_area.current_window.end.utc, '2026-07-01T00:00:00.000Z');
   });
 });
