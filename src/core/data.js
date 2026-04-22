@@ -552,6 +552,13 @@ function decodeVwapDvaRow(row) {
   return {
     bar_index: typeof row.index === 'number' ? row.index : null,
     time: typeof v[0] === 'number' ? v[0] : null,
+    bar: row.bar && typeof row.bar === 'object' ? {
+      open: typeof row.bar.open === 'number' ? row.bar.open : null,
+      high: typeof row.bar.high === 'number' ? row.bar.high : null,
+      low: typeof row.bar.low === 'number' ? row.bar.low : null,
+      close: typeof row.bar.close === 'number' ? row.bar.close : null,
+      volume: typeof row.bar.volume === 'number' ? row.bar.volume : null,
+    } : null,
     variables: {
       VWAP: typeof v[1] === 'number' ? v[1] : null,
       DVAH: typeof v[3] === 'number' ? v[3] : null,
@@ -758,6 +765,407 @@ function buildVwapDvaArea(group, periodType) {
   };
 }
 
+const VWAP_NARRATIVE_DEFAULTS = Object.freeze({
+  acceptance_bars: 4,
+  slope_lookback_bars: 4,
+  slope_threshold: 0.25,
+});
+
+function normalizeVwapDvaNarrativeConfig(config = {}) {
+  const acceptanceBars = Number.isFinite(config?.acceptance_bars) && config.acceptance_bars > 0
+    ? Math.max(1, Math.trunc(config.acceptance_bars))
+    : VWAP_NARRATIVE_DEFAULTS.acceptance_bars;
+  const slopeLookbackBars = Number.isFinite(config?.slope_lookback_bars) && config.slope_lookback_bars > 0
+    ? Math.max(1, Math.trunc(config.slope_lookback_bars))
+    : VWAP_NARRATIVE_DEFAULTS.slope_lookback_bars;
+  const slopeThreshold = Number.isFinite(config?.slope_threshold) && config.slope_threshold > 0
+    ? Number(config.slope_threshold)
+    : VWAP_NARRATIVE_DEFAULTS.slope_threshold;
+  return {
+    acceptance_bars: acceptanceBars,
+    slope_lookback_bars: slopeLookbackBars,
+    slope_threshold: slopeThreshold,
+  };
+}
+
+function buildVwapDvaNarrativeLevels(areaVariables) {
+  if (!areaVariables || typeof areaVariables !== 'object') return null;
+  const upper = areaVariables.DVAH;
+  const lower = areaVariables.DVAL;
+  if (!Number.isFinite(upper) || !Number.isFinite(lower)) return null;
+  return {
+    upper,
+    lower,
+    vwap: Number.isFinite(areaVariables.VWAP) ? areaVariables.VWAP : null,
+    upper_half: Number.isFinite(areaVariables['middle up 0.5']) ? areaVariables['middle up 0.5'] : null,
+    lower_half: Number.isFinite(areaVariables['middle down 0.5']) ? areaVariables['middle down 0.5'] : null,
+    upper_one_half: Number.isFinite(areaVariables['Middle up 1.5']) ? areaVariables['Middle up 1.5'] : null,
+    lower_one_half: Number.isFinite(areaVariables['Middle down 1.5']) ? areaVariables['Middle down 1.5'] : null,
+    upper_two: Number.isFinite(areaVariables['DVA+2']) ? areaVariables['DVA+2'] : null,
+    lower_two: Number.isFinite(areaVariables['DVA-2']) ? areaVariables['DVA-2'] : null,
+  };
+}
+
+function buildVwapDvaNarrativeStates(rows, { areaKind, fixedArea } = {}) {
+  const fixedLevels = areaKind === 'PVA' ? buildVwapDvaNarrativeLevels(fixedArea?.variables) : null;
+  const states = [];
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const bar = row?.bar;
+    if (!bar || !Number.isFinite(bar.high) || !Number.isFinite(bar.low) || !Number.isFinite(bar.close)) continue;
+    const levels = areaKind === 'PVA' ? fixedLevels : buildVwapDvaNarrativeLevels(row?.variables);
+    if (!levels) continue;
+    states.push({
+      row,
+      bar,
+      levels,
+      fully_above: bar.low > levels.upper,
+      fully_below: bar.high < levels.lower,
+      fully_inside: bar.high < levels.upper && bar.low > levels.lower,
+      close_above: bar.close > levels.upper,
+      close_below: bar.close < levels.lower,
+      close_inside: bar.close <= levels.upper && bar.close >= levels.lower,
+      touched_upper: bar.high >= levels.upper && bar.low <= levels.upper,
+      touched_lower: bar.high >= levels.lower && bar.low <= levels.lower,
+      touched_upper_half: Number.isFinite(levels.upper_half) && bar.high >= levels.upper_half && bar.low <= levels.upper_half,
+      touched_lower_half: Number.isFinite(levels.lower_half) && bar.high >= levels.lower_half && bar.low <= levels.lower_half,
+      touched_upper_one_half: Number.isFinite(levels.upper_one_half) && bar.high >= levels.upper_one_half && bar.low <= levels.upper_one_half,
+      touched_lower_one_half: Number.isFinite(levels.lower_one_half) && bar.high >= levels.lower_one_half && bar.low <= levels.lower_one_half,
+      touched_upper_two: Number.isFinite(levels.upper_two) && bar.high >= levels.upper_two && bar.low <= levels.upper_two,
+      touched_lower_two: Number.isFinite(levels.lower_two) && bar.high >= levels.lower_two && bar.low <= levels.lower_two,
+    });
+  }
+  return states;
+}
+
+function hasConsecutiveNarrativeStates(states, endIndex, count, predicate) {
+  const startIndex = endIndex - count + 1;
+  if (startIndex < 0) return -1;
+  for (let i = startIndex; i <= endIndex; i += 1) {
+    if (!predicate(states[i])) return -1;
+  }
+  return startIndex;
+}
+
+function isCrossToOutside(state, previousState, direction) {
+  if (!state || !previousState) return false;
+  if (direction === 'up') {
+    return state.touched_upper && state.bar.close >= state.levels.upper && previousState.bar.close <= previousState.levels.upper;
+  }
+  return state.touched_lower && state.bar.close <= state.levels.lower && previousState.bar.close >= previousState.levels.lower;
+}
+
+function isCrossToInside(state, previousState, direction) {
+  if (!state || !previousState) return false;
+  if (direction === 'up') {
+    return state.touched_lower && state.bar.close >= state.levels.lower && previousState.bar.close < previousState.levels.lower;
+  }
+  return state.touched_upper && state.bar.close <= state.levels.upper && previousState.bar.close > previousState.levels.upper;
+}
+
+function getWaveExpectedSign(mode, direction) {
+  if (mode === 'outside') return direction === 'up' ? 1 : -1;
+  return direction === 'up' ? 1 : -1;
+}
+
+function getWaveQualifier(mode, direction) {
+  if (mode === 'outside') return direction === 'up' ? 'close_above' : 'close_below';
+  return 'close_inside';
+}
+
+function getTargetTouchKey(areaKind, mode, direction) {
+  if (mode === 'outside') {
+    if (areaKind === 'PVA') return direction === 'up' ? 'touched_upper_one_half' : 'touched_lower_one_half';
+    return direction === 'up' ? 'touched_upper_two' : 'touched_lower_two';
+  }
+  return direction === 'up' ? 'touched_lower_half' : 'touched_upper_half';
+}
+
+function measureWaveParticipation(states, startIndex, endIndex, { mode, direction } = {}) {
+  if (!Array.isArray(states) || startIndex < 0 || endIndex <= startIndex) return 0;
+  const sign = getWaveExpectedSign(mode, direction);
+  const qualifier = getWaveQualifier(mode, direction);
+  let trendBars = 0;
+  let qualifyingBars = 0;
+  for (let i = startIndex + 1; i <= endIndex; i += 1) {
+    const previousState = states[i - 1];
+    const state = states[i];
+    if (!previousState || !state) continue;
+    const previousClose = previousState.bar?.close;
+    const currentClose = state.bar?.close;
+    if (!Number.isFinite(previousClose) || !Number.isFinite(currentClose)) continue;
+    const delta = currentClose - previousClose;
+    if ((sign > 0 && delta >= 0) || (sign < 0 && delta <= 0)) {
+      trendBars += 1;
+      if (state[qualifier]) qualifyingBars += 1;
+    }
+  }
+  if (trendBars === 0) return states[endIndex]?.[qualifier] ? 1 : 0;
+  return qualifyingBars / trendBars;
+}
+
+function computeNormalizedVwapSlope(states, endIndex, lookbackBars) {
+  const endState = states[endIndex];
+  if (!endState || !Number.isFinite(endState.levels?.vwap)) return null;
+  const startIndex = Math.max(0, endIndex - Math.max(1, lookbackBars));
+  const startState = states[startIndex];
+  if (!startState || !Number.isFinite(startState.levels?.vwap)) return null;
+  const sigma = Math.abs((endState.levels.upper ?? NaN) - (endState.levels.vwap ?? NaN));
+  if (!Number.isFinite(sigma) || sigma <= 0) return null;
+  return (endState.levels.vwap - startState.levels.vwap) / sigma;
+}
+
+function findTargetTouchIndex(states, crossIndex, endIndex, { areaKind, mode, direction } = {}) {
+  const targetKey = getTargetTouchKey(areaKind, mode, direction);
+  if (!targetKey) return -1;
+  for (let i = crossIndex; i <= endIndex; i += 1) {
+    if (states[i]?.[targetKey]) return i;
+  }
+  return -1;
+}
+
+function findLatestAcceptanceByMode(states, { areaKind, mode, direction, config } = {}) {
+  if (!Array.isArray(states) || states.length === 0) return null;
+  const acceptanceBars = config.acceptance_bars;
+  const fullPredicate = mode === 'outside'
+    ? (direction === 'up' ? state => state.fully_above : state => state.fully_below)
+    : state => state.fully_inside;
+
+  let acceptanceState = null;
+  for (let endIndex = states.length - 1; endIndex >= acceptanceBars - 1; endIndex -= 1) {
+    const runStart = hasConsecutiveNarrativeStates(states, endIndex, acceptanceBars, fullPredicate);
+    if (runStart < 0) continue;
+    acceptanceState = states[endIndex];
+
+    for (let crossIndex = endIndex; crossIndex >= 1; crossIndex -= 1) {
+      const previousState = states[crossIndex - 1];
+      const state = states[crossIndex];
+      const crossed = mode === 'outside'
+        ? isCrossToOutside(state, previousState, direction)
+        : isCrossToInside(state, previousState, direction);
+      if (!crossed) continue;
+      const targetIndex = findTargetTouchIndex(states, crossIndex, endIndex, { areaKind, mode, direction });
+      if (targetIndex < 0) continue;
+      const waveRatio = measureWaveParticipation(states, crossIndex, targetIndex, { mode, direction });
+      if (waveRatio < 0.5) continue;
+      const normalizedSlope = mode === 'outside' && areaKind === 'DVA'
+        ? computeNormalizedVwapSlope(states, endIndex, config.slope_lookback_bars)
+        : null;
+      if (mode === 'outside' && areaKind === 'DVA') {
+        if (direction === 'up' && !(normalizedSlope > config.slope_threshold)) continue;
+        if (direction === 'down' && !(normalizedSlope < -config.slope_threshold)) continue;
+      }
+      return {
+        mode,
+        direction,
+        area_kind: areaKind,
+        cross_index: crossIndex,
+        target_index: targetIndex,
+        acceptance_index: endIndex,
+        acceptance_bar_index: acceptanceState?.row?.bar_index ?? null,
+        acceptance_time: buildVwapDvaTimeInfo(acceptanceState?.row?.time ?? null),
+        levels: acceptanceState?.levels ?? state.levels,
+        wave_ratio: waveRatio,
+        normalized_vwap_slope: normalizedSlope,
+      };
+    }
+  }
+  return null;
+}
+
+function findLatestAcceptance(states, { areaKind, config } = {}) {
+  const candidates = [
+    findLatestAcceptanceByMode(states, { areaKind, mode: 'outside', direction: 'up', config }),
+    findLatestAcceptanceByMode(states, { areaKind, mode: 'outside', direction: 'down', config }),
+    findLatestAcceptanceByMode(states, { areaKind, mode: 'inside', direction: 'up', config }),
+    findLatestAcceptanceByMode(states, { areaKind, mode: 'inside', direction: 'down', config }),
+  ].filter(Boolean);
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => b.acceptance_index - a.acceptance_index);
+  return candidates[0];
+}
+
+function getPullbackType(areaKind, mode) {
+  if (areaKind === 'PVA') return mode === 'outside' ? 'BPB' : 'RPB';
+  return mode === 'outside' ? 'IPB' : 'EF';
+}
+
+function getPullbackAllowance(state, event) {
+  const activeLevels = event?.area_kind === 'DVA' ? state?.levels : event?.levels;
+  if (!state || !event || !activeLevels) return null;
+  if (event.mode === 'outside') {
+    if (event.direction === 'up') {
+      return {
+        edge: activeLevels.upper,
+        floor: activeLevels.upper_half,
+        ceiling: activeLevels.upper,
+        type: 'lower-bounded',
+      };
+    }
+    return {
+      edge: activeLevels.lower,
+      floor: activeLevels.lower,
+      ceiling: activeLevels.lower_half,
+      type: 'upper-bounded',
+    };
+  }
+  if (event.direction === 'up') {
+    return {
+      edge: activeLevels.lower,
+      floor: event.area_kind === 'PVA' ? activeLevels.lower_one_half : activeLevels.lower_two,
+      ceiling: activeLevels.lower,
+      type: 'lower-bounded',
+    };
+  }
+  return {
+    edge: activeLevels.upper,
+    floor: activeLevels.upper,
+    ceiling: event.area_kind === 'PVA' ? activeLevels.upper_one_half : activeLevels.upper_two,
+    type: 'upper-bounded',
+  };
+}
+
+function isValidPullback(state, event) {
+  const allowance = getPullbackAllowance(state, event);
+  if (!allowance || !Number.isFinite(allowance.edge)) return false;
+  if (event.mode === 'outside') {
+    if (event.direction === 'up') {
+      return state.bar.low <= allowance.edge && (!Number.isFinite(allowance.floor) || state.bar.low >= allowance.floor);
+    }
+    return state.bar.high >= allowance.edge && (!Number.isFinite(allowance.ceiling) || state.bar.high <= allowance.ceiling);
+  }
+  if (event.direction === 'up') {
+    return state.bar.low <= allowance.edge && (!Number.isFinite(allowance.floor) || state.bar.low >= allowance.floor);
+  }
+  return state.bar.high >= allowance.edge && (!Number.isFinite(allowance.ceiling) || state.bar.high <= allowance.ceiling);
+}
+
+function findFirstPullback(states, event) {
+  if (!Array.isArray(states) || !event) return null;
+  for (let i = event.acceptance_index + 1; i < states.length; i += 1) {
+    const state = states[i];
+    if (isValidPullback(state, event)) {
+      return {
+        index: i,
+        bar_index: state.row?.bar_index ?? null,
+        time: buildVwapDvaTimeInfo(state.row?.time ?? null),
+      };
+    }
+  }
+  return null;
+}
+
+function findLatestTouchedExtreme(states, event) {
+  if (!Array.isArray(states) || !event) return null;
+  let latest = null;
+  for (let i = event.acceptance_index + 1; i < states.length; i += 1) {
+    const state = states[i];
+    if (!state) continue;
+    if (state.touched_upper) latest = { side: 'upper', index: i };
+    if (state.touched_lower) latest = { side: 'lower', index: i };
+  }
+  return latest;
+}
+
+function buildNarrativeType(areaKind, event, states) {
+  if (!event) return null;
+  if (event.mode === 'outside') return event.direction === 'up' ? 'imbalance_up' : 'imbalance_down';
+  const latestExtreme = findLatestTouchedExtreme(states, event);
+  if (latestExtreme?.side === 'upper') return 'rotational_down';
+  if (latestExtreme?.side === 'lower') return 'rotational_up';
+  return event.direction === 'up' ? 'rotational_up' : 'rotational_down';
+}
+
+function buildFallbackNarrative({ areaKind, states, currentClose, dominantArea, config } = {}) {
+  const bounds = dominantArea?.reference_bounds;
+  const position = getVwapDvaPricePosition(currentClose, bounds);
+  if (position === 'Above') {
+    return {
+      dominant_area_label: areaKind,
+      direction: 'bullish',
+      type: 'imbalance_up',
+      fcs_active: false,
+      pullback_type: getPullbackType(areaKind, 'outside'),
+      pullback_state: 'confirmed',
+      config,
+    };
+  }
+  if (position === 'Below') {
+    return {
+      dominant_area_label: areaKind,
+      direction: 'bearish',
+      type: 'imbalance_down',
+      fcs_active: false,
+      pullback_type: getPullbackType(areaKind, 'outside'),
+      pullback_state: 'confirmed',
+      config,
+    };
+  }
+  let latestExtreme = null;
+  for (let i = (states?.length ?? 0) - 1; i >= 0; i -= 1) {
+    const state = states[i];
+    if (!state) continue;
+    if (state.touched_upper) {
+      latestExtreme = 'upper';
+      break;
+    }
+    if (state.touched_lower) {
+      latestExtreme = 'lower';
+      break;
+    }
+  }
+  if (!latestExtreme) {
+    const referenceVwap = areaKind === 'PVA'
+      ? dominantArea?.reference_bounds?.lower != null && dominantArea?.reference_bounds?.upper != null
+        ? (dominantArea.reference_bounds.upper + dominantArea.reference_bounds.lower) / 2
+        : null
+      : states?.[states.length - 1]?.levels?.vwap ?? null;
+    latestExtreme = Number.isFinite(referenceVwap) && Number.isFinite(currentClose) && currentClose <= referenceVwap ? 'lower' : 'upper';
+  }
+  return {
+    dominant_area_label: areaKind,
+    direction: latestExtreme === 'lower' ? 'bullish' : 'bearish',
+    type: latestExtreme === 'lower' ? 'rotational_up' : 'rotational_down',
+    fcs_active: false,
+    pullback_type: getPullbackType(areaKind, 'inside'),
+    pullback_state: 'confirmed',
+    config,
+  };
+}
+
+function buildVwapDvaNarrative({ rows, currentGroup, previousGroup, currentArea, previousArea, dominantArea, currentClose, config } = {}) {
+  const areaKind = dominantArea?.active_label === 'PVA' ? 'PVA' : 'DVA';
+  const sourceRows = areaKind === 'PVA'
+    ? [...(previousGroup?.rows ?? []), ...(currentGroup?.rows ?? [])]
+    : (currentGroup?.rows ?? []);
+  const states = buildVwapDvaNarrativeStates(sourceRows, {
+    areaKind,
+    fixedArea: areaKind === 'PVA' ? previousArea : currentArea,
+  });
+
+  const acceptance = findLatestAcceptance(states, { areaKind, config });
+  if (!acceptance) return buildFallbackNarrative({ areaKind, states, currentClose, dominantArea, config });
+
+  const narrativeType = buildNarrativeType(areaKind, acceptance, states);
+  const pullback = findFirstPullback(states, acceptance);
+  return {
+    dominant_area_label: areaKind,
+    direction: narrativeType?.endsWith('_up') ? 'bullish' : 'bearish',
+    type: narrativeType,
+    fcs_active: !pullback,
+    pullback_type: getPullbackType(areaKind, acceptance.mode),
+    pullback_state: pullback ? 'confirmed' : 'pending',
+    config,
+    acceptance: {
+      mode: acceptance.mode,
+      direction: acceptance.direction,
+      bar_index: acceptance.acceptance_bar_index,
+      time: acceptance.acceptance_time,
+      wave_ratio: acceptance.wave_ratio,
+      normalized_vwap_slope: acceptance.normalized_vwap_slope,
+    },
+  };
+}
+
 function buildVwapDvaDominantArea({ anchor = null, currentArea = null, previousArea = null, currentValueRow = null } = {}) {
   if (!currentArea || !currentArea.period_start || !currentArea.period_end) return null;
   const rule = getVwapDvaDominanceRule(anchor);
@@ -804,7 +1212,7 @@ function getVwapDvaPricePosition(close, bounds) {
   return 'Inside';
 }
 
-export function buildVwapDvaSnapshot({ symbol = null, resolution = null, studyVisible = null, studyName = 'Vwap MantillaPB', rows = [], chartLastIndex = null, currentClose = null } = {}) {
+export function buildVwapDvaSnapshot({ symbol = null, resolution = null, studyVisible = null, studyName = 'Vwap MantillaPB', rows = [], chartLastIndex = null, currentClose = null, narrativeConfig = null } = {}) {
   const normalizedRows = [];
   const sourceRows = Array.isArray(rows) ? rows : [];
   for (const row of sourceRows) {
@@ -813,6 +1221,7 @@ export function buildVwapDvaSnapshot({ symbol = null, resolution = null, studyVi
   }
 
   const periodType = getVwapDvaPeriodType(resolution);
+  const narrativeConfigResolved = normalizeVwapDvaNarrativeConfig(narrativeConfig);
   const groupedRows = groupVwapDvaRows(normalizedRows, periodType);
   const currentGroup = groupedRows.length > 0 ? groupedRows[groupedRows.length - 1] : null;
   const previousGroup = groupedRows.length > 1 ? groupedRows[groupedRows.length - 2] : null;
@@ -831,11 +1240,21 @@ export function buildVwapDvaSnapshot({ symbol = null, resolution = null, studyVi
       variables: currentRow.variables,
     } : null,
   });
+  const narrative = buildVwapDvaNarrative({
+    rows: normalizedRows,
+    currentGroup,
+    previousGroup,
+    currentArea,
+    previousArea,
+    dominantArea,
+    currentClose,
+    config: narrativeConfigResolved,
+  });
 
   return {
     success: true,
-    source: 'vwap_dva_snapshot_v10',
-    schema_version: 'v10',
+    source: 'vwap_dva_snapshot_v11',
+    schema_version: 'v11',
     symbol,
     resolution,
     chart_last_index: chartLastIndex,
@@ -851,6 +1270,7 @@ export function buildVwapDvaSnapshot({ symbol = null, resolution = null, studyVi
       dominant_area: dominantArea,
       price_close: typeof currentClose === 'number' && Number.isFinite(currentClose) ? currentClose : null,
       price_position_dominant_area: getVwapDvaPricePosition(currentClose, dominantArea?.reference_bounds),
+      narrative,
       current_value_row: currentRow ? {
         bar_index: currentRow.bar_index,
         time: buildVwapDvaTimeInfo(currentRow.time),
@@ -1602,11 +2022,26 @@ export async function getDvaSnapshot() {
 
       var rows = [];
       try {
+        var mainBars = chart.model().mainSeries().bars();
         var rawRows = study._data && Array.isArray(study._data._items) ? study._data._items : [];
         for (var i = 0; i < rawRows.length; i++) {
           var row = rawRows[i];
           if (!row || !Array.isArray(row.value)) continue;
-          rows.push({ index: typeof row.index === 'number' ? row.index : null, value: row.value });
+          var bar = null;
+          try {
+            var barIndex = typeof row.index === 'number' ? row.index : null;
+            var mainBar = typeof barIndex === 'number' ? mainBars.valueAt(barIndex) : null;
+            if (mainBar) {
+              bar = {
+                open: typeof mainBar[1] === 'number' ? mainBar[1] : null,
+                high: typeof mainBar[2] === 'number' ? mainBar[2] : null,
+                low: typeof mainBar[3] === 'number' ? mainBar[3] : null,
+                close: typeof mainBar[4] === 'number' ? mainBar[4] : null,
+                volume: typeof mainBar[5] === 'number' ? mainBar[5] : null,
+              };
+            }
+          } catch(e) {}
+          rows.push({ index: typeof row.index === 'number' ? row.index : null, value: row.value, bar: bar });
         }
       } catch(e) {}
 

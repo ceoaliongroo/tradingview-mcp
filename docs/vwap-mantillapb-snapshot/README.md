@@ -4,8 +4,8 @@ This folder documents the current version of the `Vwap MantillaPB` DVA snapshot 
 
 ## Current version
 
-- `schema_version`: `v10`
-- `source`: `vwap_dva_snapshot_v10`
+- `schema_version`: `v11`
+- `source`: `vwap_dva_snapshot_v11`
 - Primary MCP tool: `data_get_dva_snapshot`
 - Source of truth: the active TradingView Desktop chart
 
@@ -16,9 +16,11 @@ This folder documents the current version of the `Vwap MantillaPB` DVA snapshot 
 
 ## Scope
 
-This snapshot is meant to return the current and previous Development Value Area values for the active chart timeframe.
+This snapshot is meant to return the current and previous Development Value Area values for the active chart timeframe, plus the dominant-area narrative state derived from price acceptance and pullback rules.
 
 It is versioned so we can keep a stable baseline while continuing to refine the logic.
+
+Narrative rules live in [narrative-rules.md](C:/Users/manti/Documents/apps/tradingview-mcp/docs/vwap-mantillapb-snapshot/narrative-rules.md).
 
 ## Current period mappings
 
@@ -40,8 +42,8 @@ The current snapshot shape is:
 ```json
 {
   "success": true,
-  "source": "vwap_dva_snapshot_v10",
-  "schema_version": "v10",
+  "source": "vwap_dva_snapshot_v11",
+  "schema_version": "v11",
   "symbol": "STRING",
   "resolution": "STRING",
   "chart_last_index": 0,
@@ -149,6 +151,31 @@ The current snapshot shape is:
     },
     "price_close": 0,
     "price_position_dominant_area": "Above | Inside | Below",
+    "narrative": {
+      "dominant_area_label": "PVA | DVA",
+      "direction": "bullish | bearish",
+      "type": "imbalance_up | imbalance_down | rotational_up | rotational_down",
+      "fcs_active": true,
+      "pullback_type": "BPB | RPB | IPB | EF",
+      "pullback_state": "pending | confirmed",
+      "config": {
+        "acceptance_bars": 4,
+        "slope_lookback_bars": 4,
+        "slope_threshold": 0.25
+      },
+      "acceptance": {
+        "mode": "inside | outside",
+        "direction": "up | down",
+        "bar_index": 0,
+        "time": {
+          "raw": 0,
+          "utc": "ISO-8601",
+          "israel": "YYYY-MM-DD HH:mm"
+        },
+        "wave_ratio": 0,
+        "normalized_vwap_slope": 0
+      }
+    },
     "current_value_row": {
       "bar_index": 0,
       "time": {
@@ -182,28 +209,29 @@ The current snapshot shape is:
 - `dominant_area` tells you which area is currently in control for the active anchor window and where the switch happens.
 - `price_close` is the current close used to evaluate the price against the dominant area's bounds.
 - `price_position_dominant_area` tells you where the current close sits relative to the dominant area's extremes. `Above`, `Inside`, and `Below` are inclusive of exact touches as `Inside`.
+- `narrative` resolves the current directional story against the dominant area. It always returns a bullish or bearish state, a pullback type, and whether the first pullback is still pending.
 
 ## Version notes
 
-### `v10`
+### `v11`
 
 Current baseline.
 
 Changes included in this version:
 
-- `dominant_area` was added to the snapshot.
-- `price_close` and `price_position_dominant_area` were added. `price_position_dominant_area` is computed from the current close against the dominant area's bounds.
-- `1D`, `8h`, `2h`, `30m`, `1M`, and `1W` keep their existing type mappings.
-- The snapshot now exposes the active dominant side plus the switch window for the current anchor.
+- `narrative` was added to the snapshot.
+- The narrative block reports `direction`, `type`, `fcs_active`, `pullback_type`, and `pullback_state`.
+- Acceptance timing is configurable and currently defaults to `4` bars.
+- DVA outside acceptance uses normalized VWAP slope with defaults stored in the snapshot config.
 
-### `v9`
+### `v10`
 
 Previous baseline.
 
 Changes included in this version:
 
 - `dominant_area` was added to the snapshot.
-- `price_close` and `price_position` were added. `price_position` is computed from the current close against the dominant area's bounds.
+- `price_close` and `price_position_dominant_area` were added. `price_position_dominant_area` is computed from the current close against the dominant area's bounds.
 - `1D`, `8h`, `2h`, `30m`, `1M`, and `1W` keep their existing type mappings.
 - The snapshot now exposes the active dominant side plus the switch window for the current anchor.
 

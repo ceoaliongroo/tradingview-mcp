@@ -14,6 +14,54 @@ import {
   normalizeStudyInputs,
 } from '../src/core/data.js';
 
+function createVwapNarrativeRow({
+  index,
+  time,
+  vwap,
+  upper,
+  lower,
+  upperTwo,
+  lowerTwo,
+  upperHalf,
+  lowerHalf,
+  upperOneHalf,
+  lowerOneHalf,
+  bar,
+}) {
+  return {
+    index,
+    bar,
+    value: [
+      time,
+      vwap,
+      0,
+      upper,
+      0,
+      lower,
+      0,
+      upperTwo,
+      0,
+      lowerTwo,
+      0,
+      upperTwo + 10,
+      0,
+      lowerTwo - 10,
+      0,
+      upperHalf,
+      0,
+      lowerHalf,
+      0,
+      upperOneHalf,
+      0,
+      lowerOneHalf,
+      0,
+      0,
+      0,
+      0,
+    ],
+  };
+}
+
 describe('normalizeStudyInputs', () => {
   it('keeps structured input metadata and current values', () => {
     const inputs = normalizeStudyInputs([
@@ -249,30 +297,30 @@ describe('normalizeStudyInputs', () => {
       currentClose: 260.4453201814728,
     });
 
-    assert.equal(snapshot.source, 'vwap_dva_snapshot_v10');
-    assert.equal(snapshot.schema_version, 'v10');
+    assert.equal(snapshot.source, 'vwap_dva_snapshot_v11');
+    assert.equal(snapshot.schema_version, 'v11');
     assert.equal(snapshot.dva.type, 'annual');
     assert.equal(snapshot.dva.anchor, 'Year');
     assert.equal(snapshot.dva.current.period_start.raw, 1767225600);
     assert.equal(snapshot.dva.current.period_start.utc, '2026-01-01T00:00:00.000Z');
     assert.equal(snapshot.dva.current.period_start.israel, '2026-01-01 02:00');
     assert.equal(snapshot.dva.current.period_end.raw, 1776470400);
-    assert.equal(snapshot.dva.current.period_end.utc, '2026-04-19T00:00:00.000Z');
+    assert.equal(snapshot.dva.current.period_end.utc, '2026-04-18T00:00:00.000Z');
     assert.equal(snapshot.dva.previous.period_start.raw, 1735689600);
     assert.equal(snapshot.dva.previous.period_start.utc, '2025-01-01T00:00:00.000Z');
     assert.equal(snapshot.dva.previous.period_start.israel, '2025-01-01 02:00');
     assert.equal(snapshot.dva.previous.period_end.raw, 1767139200);
     assert.equal(snapshot.dva.previous.period_end.utc, '2025-12-31T00:00:00.000Z');
     assert.equal(snapshot.dva.previous.period_end.israel, '2025-12-31 02:00');
-    assert.equal(snapshot.dva.current.period_start_bar_index, 191);
+    assert.equal(snapshot.dva.current.period_start_bar_index, 299);
     assert.equal(snapshot.dva.current.period_end_bar_index, 299);
-    assert.equal(snapshot.dva.previous.period_start_bar_index, -1000100);
-    assert.equal(snapshot.dva.previous.period_end_bar_index, 190);
+    assert.equal(snapshot.dva.previous.period_start_bar_index, 191);
+    assert.equal(snapshot.dva.previous.period_end_bar_index, 191);
     assert.equal(snapshot.dva.current.variables.VWAP, 74316.01121211374);
     assert.equal(snapshot.dva.previous.variables.DVAH, 112554.21780299074);
     assert.equal(snapshot.dva.current.display_values.VWAP, '74,316.011212');
-    assert.equal(snapshot.dva.current_value_row.time.utc, '2026-04-19T00:00:00.000Z');
-    assert.equal(snapshot.dva.current_value_row.time.israel, '2026-04-19 03:00');
+    assert.equal(snapshot.dva.current_value_row.time.utc, '2026-04-18T00:00:00.000Z');
+    assert.equal(snapshot.dva.current_value_row.time.israel, '2026-04-18 03:00');
   });
 
   it('treats 2h as monthly for the DVA snapshot versioned output', () => {
@@ -347,8 +395,8 @@ describe('normalizeStudyInputs', () => {
       ],
     });
 
-    assert.equal(snapshot.source, 'vwap_dva_snapshot_v10');
-    assert.equal(snapshot.schema_version, 'v10');
+    assert.equal(snapshot.source, 'vwap_dva_snapshot_v11');
+    assert.equal(snapshot.schema_version, 'v11');
     assert.equal(snapshot.dva.type, 'monthly');
     assert.equal(snapshot.dva.anchor, 'Month');
     assert.equal(snapshot.dva.current.period_key, '2026-04');
@@ -435,8 +483,8 @@ describe('normalizeStudyInputs', () => {
       ],
     });
 
-    assert.equal(snapshot.source, 'vwap_dva_snapshot_v10');
-    assert.equal(snapshot.schema_version, 'v10');
+    assert.equal(snapshot.source, 'vwap_dva_snapshot_v11');
+    assert.equal(snapshot.schema_version, 'v11');
     assert.equal(snapshot.dva.type, 'weekly');
     assert.equal(snapshot.dva.anchor, 'Week');
     assert.equal(snapshot.dva.current.period_key, '2026-W16');
@@ -521,8 +569,8 @@ describe('normalizeStudyInputs', () => {
       ],
     });
 
-    assert.equal(snapshot.source, 'vwap_dva_snapshot_v10');
-    assert.equal(snapshot.schema_version, 'v10');
+    assert.equal(snapshot.source, 'vwap_dva_snapshot_v11');
+    assert.equal(snapshot.schema_version, 'v11');
     assert.equal(snapshot.dva.type, 'monthly');
     assert.equal(snapshot.dva.anchor, 'Decade');
   });
@@ -599,8 +647,8 @@ describe('normalizeStudyInputs', () => {
       ],
     });
 
-    assert.equal(snapshot.source, 'vwap_dva_snapshot_v10');
-    assert.equal(snapshot.schema_version, 'v10');
+    assert.equal(snapshot.source, 'vwap_dva_snapshot_v11');
+    assert.equal(snapshot.schema_version, 'v11');
     assert.equal(snapshot.dva.type, 'weekly');
     assert.equal(snapshot.dva.anchor, 'HalfDecade');
   });
@@ -611,6 +659,7 @@ describe('normalizeStudyInputs', () => {
       resolution: '8h',
       chartLastIndex: 299,
       studyVisible: true,
+      currentClose: 260.4453201814728,
       rows: [
         {
           index: 152,
@@ -677,8 +726,8 @@ describe('normalizeStudyInputs', () => {
       ],
     });
 
-    assert.equal(snapshot.source, 'vwap_dva_snapshot_v10');
-    assert.equal(snapshot.schema_version, 'v10');
+    assert.equal(snapshot.source, 'vwap_dva_snapshot_v11');
+    assert.equal(snapshot.schema_version, 'v11');
     assert.equal(snapshot.dva.type, 'quarterly');
     assert.equal(snapshot.dva.anchor, 'Quarter');
     assert.equal(snapshot.dva.dominant_area.active_side, 'previous');
@@ -688,5 +737,397 @@ describe('normalizeStudyInputs', () => {
     assert.equal(snapshot.dva.dominant_area.current_window.end.utc, '2026-07-01T00:00:00.000Z');
     assert.equal(snapshot.dva.price_close, 260.4453201814728);
     assert.equal(snapshot.dva.price_position_dominant_area, 'Inside');
+  });
+
+  it('resolves a pending BPB narrative while the dominant area is PVA', () => {
+    const upper = 110;
+    const lower = 90;
+    const rows = [
+      createVwapNarrativeRow({
+        index: 0,
+        time: Date.UTC(2026, 3, 17, 18, 0) / 1000,
+        vwap: 100,
+        upper,
+        lower,
+        upperTwo: 120,
+        lowerTwo: 80,
+        upperHalf: 105,
+        lowerHalf: 95,
+        upperOneHalf: 115,
+        lowerOneHalf: 85,
+        bar: { open: 100, high: 108, low: 96, close: 101, volume: 1 },
+      }),
+      createVwapNarrativeRow({
+        index: 1,
+        time: Date.UTC(2026, 3, 17, 19, 0) / 1000,
+        vwap: 100,
+        upper,
+        lower,
+        upperTwo: 120,
+        lowerTwo: 80,
+        upperHalf: 105,
+        lowerHalf: 95,
+        upperOneHalf: 115,
+        lowerOneHalf: 85,
+        bar: { open: 101, high: 112, low: 100, close: 111, volume: 1 },
+      }),
+      createVwapNarrativeRow({
+        index: 2,
+        time: Date.UTC(2026, 3, 17, 20, 0) / 1000,
+        vwap: 100,
+        upper,
+        lower,
+        upperTwo: 120,
+        lowerTwo: 80,
+        upperHalf: 105,
+        lowerHalf: 95,
+        upperOneHalf: 115,
+        lowerOneHalf: 85,
+        bar: { open: 111, high: 116, low: 109, close: 115, volume: 1 },
+      }),
+      createVwapNarrativeRow({
+        index: 3,
+        time: Date.UTC(2026, 3, 17, 21, 0) / 1000,
+        vwap: 100,
+        upper,
+        lower,
+        upperTwo: 120,
+        lowerTwo: 80,
+        upperHalf: 105,
+        lowerHalf: 95,
+        upperOneHalf: 115,
+        lowerOneHalf: 85,
+        bar: { open: 115, high: 117, low: 112, close: 116, volume: 1 },
+      }),
+      createVwapNarrativeRow({
+        index: 4,
+        time: Date.UTC(2026, 3, 17, 22, 0) / 1000,
+        vwap: 100,
+        upper,
+        lower,
+        upperTwo: 120,
+        lowerTwo: 80,
+        upperHalf: 105,
+        lowerHalf: 95,
+        upperOneHalf: 115,
+        lowerOneHalf: 85,
+        bar: { open: 116, high: 118, low: 113, close: 117, volume: 1 },
+      }),
+      createVwapNarrativeRow({
+        index: 5,
+        time: Date.UTC(2026, 3, 17, 23, 0) / 1000,
+        vwap: 100,
+        upper,
+        lower,
+        upperTwo: 120,
+        lowerTwo: 80,
+        upperHalf: 105,
+        lowerHalf: 95,
+        upperOneHalf: 115,
+        lowerOneHalf: 85,
+        bar: { open: 117, high: 119, low: 114, close: 118, volume: 1 },
+      }),
+      createVwapNarrativeRow({
+        index: 6,
+        time: Date.UTC(2026, 3, 18, 0, 0) / 1000,
+        vwap: 100,
+        upper,
+        lower,
+        upperTwo: 120,
+        lowerTwo: 80,
+        upperHalf: 105,
+        lowerHalf: 95,
+        upperOneHalf: 115,
+        lowerOneHalf: 85,
+        bar: { open: 118, high: 120, low: 115, close: 119, volume: 1 },
+      }),
+      createVwapNarrativeRow({
+        index: 7,
+        time: Date.UTC(2026, 3, 20, 12, 0) / 1000,
+        vwap: 101,
+        upper: 111,
+        lower: 91,
+        upperTwo: 121,
+        lowerTwo: 81,
+        upperHalf: 106,
+        lowerHalf: 96,
+        upperOneHalf: 116,
+        lowerOneHalf: 86,
+        bar: { open: 119, high: 121, low: 116, close: 120, volume: 1 },
+      }),
+    ];
+
+    const snapshot = buildVwapDvaSnapshot({
+      symbol: 'BATS:AAPL',
+      resolution: '30',
+      chartLastIndex: 7,
+      studyVisible: true,
+      rows,
+      currentClose: 120,
+    });
+
+    assert.equal(snapshot.source, 'vwap_dva_snapshot_v11');
+    assert.equal(snapshot.schema_version, 'v11');
+    assert.equal(snapshot.dva.dominant_area.active_label, 'PVA');
+    assert.equal(snapshot.dva.narrative.dominant_area_label, 'PVA');
+    assert.equal(snapshot.dva.narrative.direction, 'bullish');
+    assert.equal(snapshot.dva.narrative.type, 'imbalance_up');
+    assert.equal(snapshot.dva.narrative.pullback_type, 'BPB');
+    assert.equal(snapshot.dva.narrative.pullback_state, 'pending');
+    assert.equal(snapshot.dva.narrative.fcs_active, true);
+  });
+
+  it('resolves a confirmed EF narrative while the dominant area is DVA', () => {
+    const rows = [
+      createVwapNarrativeRow({
+        index: 0,
+        time: Date.UTC(2026, 3, 20, 1, 0) / 1000,
+        vwap: 100,
+        upper: 110,
+        lower: 90,
+        upperTwo: 120,
+        lowerTwo: 80,
+        upperHalf: 105,
+        lowerHalf: 95,
+        upperOneHalf: 115,
+        lowerOneHalf: 85,
+        bar: { open: 114, high: 116, low: 112, close: 114, volume: 1 },
+      }),
+      createVwapNarrativeRow({
+        index: 1,
+        time: Date.UTC(2026, 3, 21, 3, 0) / 1000,
+        vwap: 100,
+        upper: 110,
+        lower: 90,
+        upperTwo: 120,
+        lowerTwo: 80,
+        upperHalf: 105,
+        lowerHalf: 95,
+        upperOneHalf: 115,
+        lowerOneHalf: 85,
+        bar: { open: 114, high: 112, low: 103, close: 104, volume: 1 },
+      }),
+      createVwapNarrativeRow({
+        index: 2,
+        time: Date.UTC(2026, 3, 21, 4, 0) / 1000,
+        vwap: 100,
+        upper: 110,
+        lower: 90,
+        upperTwo: 120,
+        lowerTwo: 80,
+        upperHalf: 105,
+        lowerHalf: 95,
+        upperOneHalf: 115,
+        lowerOneHalf: 85,
+        bar: { open: 104, high: 106, low: 104, close: 104, volume: 1 },
+      }),
+      createVwapNarrativeRow({
+        index: 3,
+        time: Date.UTC(2026, 3, 21, 5, 0) / 1000,
+        vwap: 100,
+        upper: 110,
+        lower: 90,
+        upperTwo: 120,
+        lowerTwo: 80,
+        upperHalf: 105,
+        lowerHalf: 95,
+        upperOneHalf: 115,
+        lowerOneHalf: 85,
+        bar: { open: 104, high: 104, low: 96, close: 100, volume: 1 },
+      }),
+      createVwapNarrativeRow({
+        index: 4,
+        time: Date.UTC(2026, 3, 21, 6, 0) / 1000,
+        vwap: 100,
+        upper: 110,
+        lower: 90,
+        upperTwo: 120,
+        lowerTwo: 80,
+        upperHalf: 105,
+        lowerHalf: 95,
+        upperOneHalf: 115,
+        lowerOneHalf: 85,
+        bar: { open: 100, high: 103, low: 95, close: 99, volume: 1 },
+      }),
+      createVwapNarrativeRow({
+        index: 5,
+        time: Date.UTC(2026, 3, 21, 7, 0) / 1000,
+        vwap: 100,
+        upper: 110,
+        lower: 90,
+        upperTwo: 120,
+        lowerTwo: 80,
+        upperHalf: 105,
+        lowerHalf: 95,
+        upperOneHalf: 115,
+        lowerOneHalf: 85,
+        bar: { open: 99, high: 102, low: 94, close: 98, volume: 1 },
+      }),
+      createVwapNarrativeRow({
+        index: 6,
+        time: Date.UTC(2026, 3, 21, 8, 0) / 1000,
+        vwap: 100,
+        upper: 110,
+        lower: 90,
+        upperTwo: 120,
+        lowerTwo: 80,
+        upperHalf: 105,
+        lowerHalf: 95,
+        upperOneHalf: 115,
+        lowerOneHalf: 85,
+        bar: { open: 98, high: 101, low: 93, close: 97, volume: 1 },
+      }),
+      createVwapNarrativeRow({
+        index: 7,
+        time: Date.UTC(2026, 3, 21, 9, 0) / 1000,
+        vwap: 100,
+        upper: 110,
+        lower: 90,
+        upperTwo: 120,
+        lowerTwo: 80,
+        upperHalf: 105,
+        lowerHalf: 95,
+        upperOneHalf: 115,
+        lowerOneHalf: 85,
+        bar: { open: 97, high: 111, low: 102, close: 108, volume: 1 },
+      }),
+      createVwapNarrativeRow({
+        index: 8,
+        time: Date.UTC(2026, 3, 21, 10, 0) / 1000,
+        vwap: 100,
+        upper: 110,
+        lower: 90,
+        upperTwo: 120,
+        lowerTwo: 80,
+        upperHalf: 105,
+        lowerHalf: 95,
+        upperOneHalf: 115,
+        lowerOneHalf: 85,
+        bar: { open: 108, high: 100, low: 92, close: 94, volume: 1 },
+      }),
+    ];
+
+    const snapshot = buildVwapDvaSnapshot({
+      symbol: 'BATS:AAPL',
+      resolution: '30',
+      chartLastIndex: 8,
+      studyVisible: true,
+      rows,
+      currentClose: 94,
+    });
+
+    assert.equal(snapshot.source, 'vwap_dva_snapshot_v11');
+    assert.equal(snapshot.schema_version, 'v11');
+    assert.equal(snapshot.dva.dominant_area.active_label, 'DVA');
+    assert.equal(snapshot.dva.narrative.dominant_area_label, 'DVA');
+    assert.equal(snapshot.dva.narrative.direction, 'bearish');
+    assert.equal(snapshot.dva.narrative.type, 'rotational_down');
+    assert.equal(snapshot.dva.narrative.pullback_type, 'EF');
+    assert.equal(snapshot.dva.narrative.pullback_state, 'confirmed');
+    assert.equal(snapshot.dva.narrative.fcs_active, false);
+  });
+
+  it('confirms IPB using the dynamic DVA edge after outside acceptance', () => {
+    const rows = [
+      createVwapNarrativeRow({
+        index: 0,
+        time: Date.UTC(2026, 3, 21, 12, 30) / 1000,
+        vwap: 272,
+        upper: 273,
+        lower: 271,
+        upperTwo: 274,
+        lowerTwo: 270,
+        upperHalf: 272.5,
+        lowerHalf: 271.5,
+        upperOneHalf: 273.5,
+        lowerOneHalf: 270.5,
+        bar: { open: 271.5, high: 271.6, low: 270.8, close: 270.9, volume: 1 },
+      }),
+      createVwapNarrativeRow({
+        index: 1,
+        time: Date.UTC(2026, 3, 21, 13, 0) / 1000,
+        vwap: 271.8,
+        upper: 272.8,
+        lower: 270.8,
+        upperTwo: 273.8,
+        lowerTwo: 269.8,
+        upperHalf: 272.3,
+        lowerHalf: 271.3,
+        upperOneHalf: 273.3,
+        lowerOneHalf: 270.3,
+        bar: { open: 270.9, high: 271, low: 270.1, close: 270.2, volume: 1 },
+      }),
+      createVwapNarrativeRow({
+        index: 2,
+        time: Date.UTC(2026, 3, 21, 13, 30) / 1000,
+        vwap: 271.5,
+        upper: 272.5,
+        lower: 270.5,
+        upperTwo: 273.5,
+        lowerTwo: 269.5,
+        upperHalf: 272,
+        lowerHalf: 271,
+        upperOneHalf: 273,
+        lowerOneHalf: 270,
+        bar: { open: 270.2, high: 270.3, low: 269.4, close: 269.6, volume: 1 },
+      }),
+      createVwapNarrativeRow({
+        index: 3,
+        time: Date.UTC(2026, 3, 21, 14, 0) / 1000,
+        vwap: 271.2,
+        upper: 272.2,
+        lower: 270.2,
+        upperTwo: 273.2,
+        lowerTwo: 269.2,
+        upperHalf: 271.7,
+        lowerHalf: 270.7,
+        upperOneHalf: 272.7,
+        lowerOneHalf: 269.7,
+        bar: { open: 269.6, high: 269.7, low: 268.9, close: 269.1, volume: 1 },
+      }),
+      createVwapNarrativeRow({
+        index: 4,
+        time: Date.UTC(2026, 3, 21, 14, 30) / 1000,
+        vwap: 271,
+        upper: 272,
+        lower: 270,
+        upperTwo: 273,
+        lowerTwo: 269,
+        upperHalf: 271.5,
+        lowerHalf: 270.5,
+        upperOneHalf: 272.5,
+        lowerOneHalf: 269.5,
+        bar: { open: 269.1, high: 269.2, low: 268.6, close: 268.8, volume: 1 },
+      }),
+      createVwapNarrativeRow({
+        index: 5,
+        time: Date.UTC(2026, 3, 21, 22, 0) / 1000,
+        vwap: 268.8,
+        upper: 269.8,
+        lower: 267.8,
+        upperTwo: 270.8,
+        lowerTwo: 266.8,
+        upperHalf: 269.3,
+        lowerHalf: 268.3,
+        upperOneHalf: 270.3,
+        lowerOneHalf: 267.3,
+        bar: { open: 268.7, high: 267.85, low: 267.2, close: 267.5, volume: 1 },
+      }),
+    ];
+
+    const snapshot = buildVwapDvaSnapshot({
+      symbol: 'BATS:AAPL',
+      resolution: '30',
+      chartLastIndex: 5,
+      studyVisible: true,
+      rows,
+      currentClose: 267.5,
+    });
+
+    assert.equal(snapshot.source, 'vwap_dva_snapshot_v11');
+    assert.equal(snapshot.dva.narrative.type, 'imbalance_down');
+    assert.equal(snapshot.dva.narrative.pullback_type, 'IPB');
+    assert.equal(snapshot.dva.narrative.pullback_state, 'confirmed');
+    assert.equal(snapshot.dva.narrative.fcs_active, false);
   });
 });
