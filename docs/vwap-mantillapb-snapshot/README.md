@@ -4,8 +4,8 @@ This folder documents the current version of the `Vwap MantillaPB` DVA snapshot 
 
 ## Current version
 
-- `schema_version`: `v8`
-- `source`: `vwap_dva_snapshot_v8`
+- `schema_version`: `v10`
+- `source`: `vwap_dva_snapshot_v10`
 - Primary MCP tool: `data_get_dva_snapshot`
 - Source of truth: the active TradingView Desktop chart
 
@@ -40,8 +40,8 @@ The current snapshot shape is:
 ```json
 {
   "success": true,
-  "source": "vwap_dva_snapshot_v8",
-  "schema_version": "v8",
+  "source": "vwap_dva_snapshot_v10",
+  "schema_version": "v10",
   "symbol": "STRING",
   "resolution": "STRING",
   "chart_last_index": 0,
@@ -147,6 +147,8 @@ The current snapshot shape is:
         }
       }
     },
+    "price_close": 0,
+    "price_position_dominant_area": "Above | Inside | Below",
     "current_value_row": {
       "bar_index": 0,
       "time": {
@@ -178,20 +180,34 @@ The current snapshot shape is:
 - `period_start` and `period_end` are calendar boundaries for the relevant DVA period.
 - `period_start_bar_index` and `period_end_bar_index` are the bar indexes used to anchor the snapshot on TradingView.
 - `dominant_area` tells you which area is currently in control for the active anchor window and where the switch happens.
+- `price_close` is the current close used to evaluate the price against the dominant area's bounds.
+- `price_position_dominant_area` tells you where the current close sits relative to the dominant area's extremes. `Above`, `Inside`, and `Below` are inclusive of exact touches as `Inside`.
 
 ## Version notes
 
-### `v8`
+### `v10`
 
 Current baseline.
 
 Changes included in this version:
 
 - `dominant_area` was added to the snapshot.
+- `price_close` and `price_position_dominant_area` were added. `price_position_dominant_area` is computed from the current close against the dominant area's bounds.
 - `1D`, `8h`, `2h`, `30m`, `1M`, and `1W` keep their existing type mappings.
 - The snapshot now exposes the active dominant side plus the switch window for the current anchor.
 
-### `v7`
+### `v9`
+
+Previous baseline.
+
+Changes included in this version:
+
+- `dominant_area` was added to the snapshot.
+- `price_close` and `price_position` were added. `price_position` is computed from the current close against the dominant area's bounds.
+- `1D`, `8h`, `2h`, `30m`, `1M`, and `1W` keep their existing type mappings.
+- The snapshot now exposes the active dominant side plus the switch window for the current anchor.
+
+### `v8`
 
 Previous baseline.
 
@@ -207,6 +223,7 @@ Changes included in this version:
 
 ### Earlier baselines
 
+- `v7`: same structure as the current snapshot before the `dominant_area` and `price_position` additions.
 - `v6`: same structure as the current snapshot before the anchor renaming for `1M` and `1W`.
 - `v5`: same general structure as the current snapshot, before the `30m -> weekly` mapping was added.
 - `v3`: earlier annual DVA baseline used while stabilizing the date and range semantics.

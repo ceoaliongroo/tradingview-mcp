@@ -98,7 +98,7 @@ export function registerDataTools(server) {
     catch (err) { return jsonResult({ success: false, error: err.message }, true); }
   });
 
-  server.tool('data_get_dva_snapshot', 'Get the versioned DVA snapshot for Vwap MantillaPB, including the current period area of value, the previous completed area of value, and the dominant_area window. On 2h, the indicator is treated as monthly. On 30m, it is treated as weekly. On 1M, the anchor is Decade. On 1W, the anchor is HalfDecade.', {}, async () => {
+  server.tool('data_get_dva_snapshot', 'Get the versioned DVA snapshot for Vwap MantillaPB, including the current period area of value, the previous completed area of value, the dominant_area window, the price_close field, and the price_position_dominant_area field. On 2h, the indicator is treated as monthly. On 30m, it is treated as weekly. On 1M, the anchor is Decade. On 1W, the anchor is HalfDecade.', {}, async () => {
     try { return jsonResult(await core.getDvaSnapshot()); }
     catch (err) { return jsonResult({ success: false, error: err.message }, true); }
   });

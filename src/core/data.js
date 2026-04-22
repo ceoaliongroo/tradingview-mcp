@@ -758,7 +758,7 @@ function buildVwapDvaArea(group, periodType) {
   };
 }
 
-function buildVwapDvaDominantArea({ anchor = null, currentArea = null, currentValueRow = null } = {}) {
+function buildVwapDvaDominantArea({ anchor = null, currentArea = null, previousArea = null, currentValueRow = null } = {}) {
   if (!currentArea || !currentArea.period_start || !currentArea.period_end) return null;
   const rule = getVwapDvaDominanceRule(anchor);
   if (!rule) return null;
@@ -769,6 +769,7 @@ function buildVwapDvaDominantArea({ anchor = null, currentArea = null, currentVa
   if (switchAt == null) return null;
   const currentTime = typeof currentValueRow?.time?.raw === 'number' ? currentValueRow.time.raw : null;
   const activeSide = currentTime != null && currentTime < switchAt ? 'previous' : 'current';
+  const referenceArea = activeSide === 'previous' ? previousArea : currentArea;
 
   return {
     anchor,
@@ -776,6 +777,12 @@ function buildVwapDvaDominantArea({ anchor = null, currentArea = null, currentVa
     active_label: activeSide === 'previous' ? 'PVA' : 'DVA',
     rule: rule.label,
     switch_at: buildVwapDvaTimeInfo(switchAt),
+    reference_bounds: referenceArea ? {
+      upper: referenceArea.variables?.DVAH ?? null,
+      lower: referenceArea.variables?.DVAL ?? null,
+      upper_label: activeSide === 'previous' ? 'PVAH' : 'DVAH',
+      lower_label: activeSide === 'previous' ? 'PVAL' : 'DVAL',
+    } : null,
     previous_window: {
       start: currentArea.period_start,
       end: buildVwapDvaTimeInfo(switchAt),
@@ -787,7 +794,17 @@ function buildVwapDvaDominantArea({ anchor = null, currentArea = null, currentVa
   };
 }
 
-export function buildVwapDvaSnapshot({ symbol = null, resolution = null, studyVisible = null, studyName = 'Vwap MantillaPB', rows = [], chartLastIndex = null } = {}) {
+function getVwapDvaPricePosition(close, bounds) {
+  if (typeof close !== 'number' || !Number.isFinite(close)) return null;
+  const upper = typeof bounds?.upper === 'number' ? bounds.upper : null;
+  const lower = typeof bounds?.lower === 'number' ? bounds.lower : null;
+  if (upper == null || lower == null) return null;
+  if (close > upper) return 'Above';
+  if (close < lower) return 'Below';
+  return 'Inside';
+}
+
+export function buildVwapDvaSnapshot({ symbol = null, resolution = null, studyVisible = null, studyName = 'Vwap MantillaPB', rows = [], chartLastIndex = null, currentClose = null } = {}) {
   const normalizedRows = [];
   const sourceRows = Array.isArray(rows) ? rows : [];
   for (const row of sourceRows) {
@@ -807,6 +824,7 @@ export function buildVwapDvaSnapshot({ symbol = null, resolution = null, studyVi
   const dominantArea = buildVwapDvaDominantArea({
     anchor: getVwapDvaAnchorLabel(resolution, periodType),
     currentArea,
+    previousArea,
     currentValueRow: currentRow ? {
       bar_index: currentRow.bar_index,
       time: buildVwapDvaTimeInfo(currentRow.time),
@@ -816,8 +834,8 @@ export function buildVwapDvaSnapshot({ symbol = null, resolution = null, studyVi
 
   return {
     success: true,
-    source: 'vwap_dva_snapshot_v8',
-    schema_version: 'v8',
+    source: 'vwap_dva_snapshot_v10',
+    schema_version: 'v10',
     symbol,
     resolution,
     chart_last_index: chartLastIndex,
@@ -831,6 +849,8 @@ export function buildVwapDvaSnapshot({ symbol = null, resolution = null, studyVi
       current: currentArea,
       previous: previousArea,
       dominant_area: dominantArea,
+      price_close: typeof currentClose === 'number' && Number.isFinite(currentClose) ? currentClose : null,
+      price_position_dominant_area: getVwapDvaPricePosition(currentClose, dominantArea?.reference_bounds),
       current_value_row: currentRow ? {
         bar_index: currentRow.bar_index,
         time: buildVwapDvaTimeInfo(currentRow.time),
@@ -1571,6 +1591,12 @@ export async function getDvaSnapshot() {
       try { symbol = typeof api.symbol === 'function' ? api.symbol() : null; } catch(e) {}
       var chartLastIndex = null;
       try { chartLastIndex = chart.model().mainSeries().bars().lastIndex(); } catch(e) {}
+      var currentClose = null;
+      try {
+        var bars = chart.model().mainSeries().bars();
+        var currentBar = typeof chartLastIndex === 'number' ? bars.valueAt(chartLastIndex) : null;
+        if (currentBar && typeof currentBar[4] === 'number') currentClose = currentBar[4];
+      } catch(e) {}
       var studyVisible = null;
       try { studyVisible = typeof study.isVisible === 'function' ? study.isVisible() : null; } catch(e) {}
 
@@ -1590,6 +1616,7 @@ export async function getDvaSnapshot() {
         chart_last_index: chartLastIndex,
         study_visible: studyVisible,
         study_name: 'Vwap MantillaPB',
+        current_close: currentClose,
         rows: rows,
       };
     })()
@@ -1603,6 +1630,7 @@ export async function getDvaSnapshot() {
     studyName: data.study_name ?? 'Vwap MantillaPB',
     rows: data.rows ?? [],
     chartLastIndex: data.chart_last_index ?? null,
+    currentClose: data.current_close ?? null,
   });
 }
 

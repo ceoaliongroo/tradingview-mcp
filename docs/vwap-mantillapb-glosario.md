@@ -35,6 +35,7 @@ Read it before changing the Pine for this indicator.
 - `30m` charts map to `Week` and use `weekColor` (`#FC4AAC`).
 - In snapshot version `v7`, `1M` / `M` use the `Decade` anchor and `1W` / `W` use the `HalfDecade` anchor. The `2h` and `30m` mappings remain `Month` and `Week`.
 - In snapshot version `v8`, the snapshot also reports `dominant_area` with the current switch window and the area that is currently in control.
+- In snapshot version `v10`, the snapshot also reports `price_close` and `price_position_dominant_area` using the current close relative to the dominant area bounds. Exact touches are counted as `Inside`. The human-facing label for this field is `Price Positions`.
 - `5m` charts map to `Session` and use `sessionColor` (`#FFFF00`).
 - The Pine source resolves this with timeframe flags, not raw strings, so `D` and `1D` behave the same.
 - In the current indicator, `Session` is the internal label used for the `5m` timeframe that represents the daily-period view.
