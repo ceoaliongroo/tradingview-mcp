@@ -223,6 +223,7 @@ Changes included in this version:
 - The narrative block reports `direction`, `type`, `fcs_active`, `pullback_type`, and `pullback_state`.
 - Acceptance timing is configurable and currently defaults to `4` bars.
 - DVA outside acceptance uses normalized VWAP slope with defaults stored in the snapshot config.
+- For `IPB`, `fcs_active` stays `true` while the first pullback remains fresh; it only turns `false` after renewed outside migration or a confirmed inside acceptance.
 
 ### `v10`
 

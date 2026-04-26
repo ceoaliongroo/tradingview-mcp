@@ -1054,6 +1054,43 @@ function findFirstPullback(states, event) {
   return null;
 }
 
+function hasOutsideMigrationResume(states, event, fromIndex) {
+  if (!Array.isArray(states) || !event || typeof fromIndex !== 'number') return false;
+  for (let i = fromIndex + 1; i < states.length; i += 1) {
+    const state = states[i];
+    if (!state) continue;
+    if (event.direction === 'up' && state.fully_above) return true;
+    if (event.direction === 'down' && state.fully_below) return true;
+  }
+  return false;
+}
+
+function hasInsideAcceptanceAfterPullback(states, event, fromIndex, config) {
+  if (!Array.isArray(states) || !event || typeof fromIndex !== 'number') return false;
+  const suffix = states.slice(fromIndex);
+  if (suffix.length === 0) return false;
+  return !!findLatestAcceptanceByMode(suffix, {
+    areaKind: event.area_kind,
+    mode: 'inside',
+    direction: 'up',
+    config,
+  }) || !!findLatestAcceptanceByMode(suffix, {
+    areaKind: event.area_kind,
+    mode: 'inside',
+    direction: 'down',
+    config,
+  });
+}
+
+function isFreshConditionShiftActive(states, event, pullback, config) {
+  if (!event) return false;
+  if (!pullback) return true;
+  if (event.mode !== 'outside') return false;
+  if (hasOutsideMigrationResume(states, event, pullback.index)) return false;
+  if (hasInsideAcceptanceAfterPullback(states, event, pullback.index, config)) return false;
+  return true;
+}
+
 function findLatestTouchedExtreme(states, event) {
   if (!Array.isArray(states) || !event) return null;
   let latest = null;
@@ -1147,11 +1184,12 @@ function buildVwapDvaNarrative({ rows, currentGroup, previousGroup, currentArea,
 
   const narrativeType = buildNarrativeType(areaKind, acceptance, states);
   const pullback = findFirstPullback(states, acceptance);
+  const fcsActive = isFreshConditionShiftActive(states, acceptance, pullback, config);
   return {
     dominant_area_label: areaKind,
     direction: narrativeType?.endsWith('_up') ? 'bullish' : 'bearish',
     type: narrativeType,
-    fcs_active: !pullback,
+    fcs_active: fcsActive,
     pullback_type: getPullbackType(areaKind, acceptance.mode),
     pullback_state: pullback ? 'confirmed' : 'pending',
     config,

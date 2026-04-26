@@ -81,6 +81,10 @@ Outside acceptance:
 - Narrative after acceptance:
   - above -> `imbalance_up`
   - below -> `imbalance_down`
+- `FCS` remains active after the first `IPB` touch while the same pullback is still in progress.
+  It is cancelled only when one of these happens:
+  - a full bar resumes outside in the migration direction
+  - a new inside acceptance is confirmed into the DVA
 
 ## Narrative fields in snapshot `v11`
 
