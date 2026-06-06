@@ -1,0 +1,206 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © Jesus_Salvatierra
+//@version=6
+indicator(title="Vwap MantillaPB", shorttitle="VWAP.BE", overlay=true)
+
+    
+computeVWAP(isNewPeriod) =>
+	var float sumVol = na
+	var float sumMeanVol = na
+	var float sumSquare = na
+
+	mean1 = (high + low) * 0.5
+	mean2 = (open + close) * 0.5
+	mean = (mean1 + mean2) * 0.5
+	// NT8 uses an 8-sample OHLC + midpoint square average for variance.
+	barSquare = (open * open + high * high + low * low + close * close + 2.0 * mean2 * mean2 + 2.0 * mean1 * mean1) / 8.0
+
+	sumVol := isNewPeriod ? volume : volume + sumVol[1]
+	sumMeanVol := isNewPeriod ? mean * volume : mean * volume + sumMeanVol[1]
+	sumSquare := isNewPeriod ? volume * barSquare : volume * barSquare + sumSquare[1]
+
+	vwap = sumVol > 0.5 ? sumMeanVol / sumVol : mean
+	variance = sumVol > 0.5 ? sumSquare / sumVol - vwap * vwap : 0.0
+	variance := variance < 0 ? 0 : variance
+	stDev = math.sqrt(variance)
+
+	[vwap, stDev, sumVol, sumMeanVol, sumSquare, mean, barSquare, variance]
+
+anchorInput = input.string(defval = "Session", title="Anchor Period",
+ options=["Micro", "IntraSemana", "SemanalCorto", "SemanaLargo", "Session", "Week", "Month", "Quarter", "Year", "Decade", "Half Decade"], group="VWAP Settings")
+autoAnchorByTF = input.bool(true, title="Anchor timeframe", group="VWAP Settings")
+anchorFromTF = switch timeframe.period
+	"5" => "Micro"
+	"30" => "IntraSemana"
+	"60" => "SemanaCorto"
+	"240" => "SemanaLargo"
+	"5" => "Session"
+	"30" => "Week"
+	"120" => "Month"
+	"480" => "Quarter"
+	"1D" => "Year"
+	"D" => "Year"
+	=> anchorInput
+anchor = autoAnchorByTF ? anchorFromTF : anchorInput
+styleGroup = "Colors"
+sessionColor = input.color(color.yellow, title="Color Session", group=styleGroup)
+weekColor = input.color(color.rgb(252, 74, 172), title="Color Week", group=styleGroup)
+monthColor = input.color(color.aqua, title="Color Month", group=styleGroup)
+quarterColor = input.color(color.orange, title="Color Quarter", group=styleGroup)
+yearColor = input.color(color.rgb(162, 163, 168), title="Color Year", group=styleGroup)
+vwapBaseColor = input.color(color.red, title="Color VWAP", group=styleGroup)
+ 
+hideonDWM = input(false, title="Hide VWAP on 1D or Above", group="VWAP Settings")
+showBands = input(true, title="Calculate Bands", group="Standard Deviation Bands Settings")
+showPrevious= input.bool(true, title= "Show Previous ZONES")
+showPrevious05 = input.bool(false, title="Show Previous 0.5 Lines", group="VWAP Settings")
+showPrevious15 = input.bool(false, title="Show Previous 1.5 Lines", group="VWAP Settings")
+showCurrent15 = input.bool(false, title="Show Current 1.5 Lines", group="Standard Deviation Bands Settings")
+stdevMult = input.float(1.0, title="DVA", group="Standard Deviation Bands Settings", step= 0.1)
+stdevMult2 = input.float(2.0, title="DVA+2", group="Standard Deviation Bands Settings", step= 0.1)
+stdevMult3 = input.float(3.0, title="DVA+3", group="Standard Deviation Bands Settings", step= 0.1)
+
+timeChange(period) =>
+	ta.change(time(period))
+
+
+isNewPeriod = switch anchor
+	"Micro" => timeChange("D") != 0
+	"IntraSemana" => timeChange("4D") != 0
+	"SemanaCorto" => timeChange("12D") != 0
+	"SemanaLargo" => timeChange("48D") != 0
+	"Session" => timeChange("D") != 0
+	"Week" => timeChange("W") != 0
+	"Month" => timeChange("M") != 0
+	"Quarter" => timeChange("3M") != 0
+	"Year" => timeChange("12M") != 0
+	"Half Decade" => (timeChange("12M") != 0) and (year % 5 == 0)
+	"Decade" => (timeChange("12M") != 0) and (year % 10 == 0)
+	=> false
+
+isEsdAnchor = anchor == "Earnings" or anchor == "Dividends" or anchor == "Splits"
+if na(close[1]) and not isEsdAnchor
+	isNewPeriod := true
+
+periodColor = switch anchor
+	"Session" => sessionColor
+	"Week" => weekColor
+	"Micro" => weekColor
+	"Month" => monthColor
+	"IntraSemana" => monthColor
+	"Quarter" => quarterColor
+	"SemanaCorto" => quarterColor
+	"Year" => yearColor
+	"SemanaLargo" => yearColor
+	=> color.gray
+float vwapValue = na
+float std = na
+float upperBandValue = na
+float lowerBandValue = na
+float upperBandValue2 = na
+float lowerBandValue2 = na
+float upperBandValue3 = na
+float lowerBandValue3 = na
+float prevwap = na
+
+
+
+if not timeframe.isdwm or timeframe.isdwm
+	[_vwap, _stDev, _sumVol, _sumMeanVol, _sumSquare, _mean, _barSquare, _variance] = computeVWAP(isNewPeriod)
+	vwapValue := _vwap
+	std := _stDev
+	upperBandValue := showBands ? _vwap + _stDev * stdevMult : na
+	lowerBandValue := showBands ? _vwap - _stDev * stdevMult : na
+	upperBandValue2 := showBands ? _vwap + _stDev * stdevMult2 : na
+	lowerBandValue2 := showBands ? _vwap - _stDev * stdevMult2 : na
+	upperBandValue3 := showBands ? _vwap + _stDev * stdevMult3 : na
+	lowerBandValue3 := showBands ? _vwap - _stDev * stdevMult3 : na
+	prevwap := isNewPeriod ? na : _vwap[1]
+    
+    
+    
+
+
+                     
+//PREVIOUS VALUE AREAS
+pdvavwap = ta.valuewhen(isNewPeriod, vwapValue[1],0)
+pdvah = ta.valuewhen(isNewPeriod, upperBandValue[1],0)
+pdval = ta.valuewhen(isNewPeriod, lowerBandValue[1],0)
+pdvah2 = ta.valuewhen(isNewPeriod, upperBandValue2[1],0)
+pdval2 = ta.valuewhen(isNewPeriod, lowerBandValue2[1],0)
+periodStart = ta.valuewhen(isNewPeriod, bar_index, 0)
+
+visibleBar = time <= chart.right_visible_bar_time
+visiblePdvavwap = ta.valuewhen(visibleBar, pdvavwap, 0)
+visiblePdvah = ta.valuewhen(visibleBar, pdvah, 0)
+visiblePdval = ta.valuewhen(visibleBar, pdval, 0)
+visiblePdvah2 = ta.valuewhen(visibleBar, pdvah2, 0)
+visiblePdval2 = ta.valuewhen(visibleBar, pdval2, 0)
+visiblePeriodStart = ta.valuewhen(visibleBar, periodStart, 0)
+
+var line prevdvah = na
+var line prevdval = na
+var line prevup05 = na
+var line prevdn05 = na
+var line prevup15 = na
+var line prevdn15 = na
+var linefill prevFill = na
+
+if barstate.islast
+	if not na(prevFill)
+		linefill.delete(prevFill)
+	if not na(prevdvah)
+		line.delete(prevdvah)
+	if not na(prevdval)
+		line.delete(prevdval)
+	if not na(prevup05)
+		line.delete(prevup05)
+	if not na(prevdn05)
+		line.delete(prevdn05)
+	if not na(prevup15)
+		line.delete(prevup15)
+	if not na(prevdn15)
+		line.delete(prevdn15)
+
+	prevdvah := na
+	prevdval := na
+	prevup05 := na
+	prevdn05 := na
+	prevup15 := na
+	prevdn15 := na
+	prevFill := na
+
+	canDrawPrevious = showPrevious and not na(visiblePeriodStart) and not na(visiblePdvah) and not na(visiblePdval)
+	if canDrawPrevious
+		prevdvah := line.new(visiblePeriodStart, visiblePdvah, visiblePeriodStart + 1, visiblePdvah, extend=extend.right, width=1, color=color.new(periodColor, 0), style=line.style_dotted)
+		prevdval := line.new(visiblePeriodStart, visiblePdval, visiblePeriodStart + 1, visiblePdval, extend=extend.right, width=1, color=color.new(periodColor, 0), style=line.style_dotted)
+		prevFill := linefill.new(prevdvah, prevdval, color.new(periodColor, 90))
+	if canDrawPrevious and showPrevious05 and not na(visiblePdvavwap)
+		prevup05 := line.new(visiblePeriodStart, (visiblePdvavwap + visiblePdvah) * 0.5, visiblePeriodStart + 1, (visiblePdvavwap + visiblePdvah) * 0.5, extend=extend.right, width=1, color=color.new(periodColor, 0), style=line.style_dotted)
+		prevdn05 := line.new(visiblePeriodStart, (visiblePdvavwap + visiblePdval) * 0.5, visiblePeriodStart + 1, (visiblePdvavwap + visiblePdval) * 0.5, extend=extend.right, width=1, color=color.new(periodColor, 0), style=line.style_dotted)
+	if canDrawPrevious and showPrevious15 and not na(visiblePdvah2) and not na(visiblePdval2)
+		prevup15 := line.new(visiblePeriodStart, (visiblePdvah + visiblePdvah2) * 0.5, visiblePeriodStart + 1, (visiblePdvah + visiblePdvah2) * 0.5, extend=extend.right, width=1, color=color.new(periodColor, 0), style=line.style_dotted)
+		prevdn15 := line.new(visiblePeriodStart, (visiblePdval + visiblePdval2) * 0.5, visiblePeriodStart + 1, (visiblePdval + visiblePdval2) * 0.5, extend=extend.right, width=1, color=color.new(periodColor, 0), style=line.style_dotted)
+
+
+vwapLineColor = close > vwapValue ? color.new(vwapBaseColor, 0) : color.new(vwapBaseColor, 0)
+bandsColor = color.new(periodColor, 80)
+fillColor = color.new(periodColor, 80)
+plotDisplay = display.pane + display.status_line + display.data_window
+
+plot(vwapValue, title="VWAP", color= vwapLineColor, linewidth = 1, display=plotDisplay)
+upperBand = plot(upperBandValue, title="DVAH", color=bandsColor, display=plotDisplay)
+lowerBand = plot(lowerBandValue, title="DVAL", color=bandsColor, display=plotDisplay)
+upper2 = plot(upperBandValue2, title="DVA+2",  color=bandsColor, display=plotDisplay)
+lower2 = plot(lowerBandValue2, title="DVA-2",  color=bandsColor, display=plotDisplay)
+upper3 = plot(upperBandValue3, title="DVA+3",  color=bandsColor, display=plotDisplay)
+lower3 = plot(lowerBandValue3, title="DVA-3",  color=bandsColor, display=plotDisplay)
+mu05 = plot(((vwapValue+upperBandValue)/2), title= "middle up 0.5", color= color.new(periodColor, 50), style = plot.style_linebr, display=plotDisplay)
+ml05 = plot(((vwapValue+lowerBandValue)/2), title= "middle down 0.5",color= color.new(periodColor, 50), style = plot.style_linebr, display=plotDisplay)
+mup2 = plot(showCurrent15 ? ((upperBandValue+upperBandValue2)/2) : na, title= "Middle up 1.5",color= color.new(periodColor, 50), style = plot.style_linebr, display=plotDisplay)
+mudn2 = plot(showCurrent15 ? ((lowerBandValue+lowerBandValue2)/2) : na, title= "Middle down 1.5", color= color.new(periodColor, 50), style = plot.style_linebr, display=plotDisplay)
+
+fill(upperBand, lowerBand, title="Bands Fill", color= showBands ? fillColor : na)
+fill(upper3, upper2, title="Bands Fill", color= showBands ? fillColor : na)
+fill(lower3, lower2, title="Bands Fill", color= showBands ? fillColor : na)
+ 

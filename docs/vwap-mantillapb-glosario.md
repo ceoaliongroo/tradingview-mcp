@@ -7,6 +7,7 @@ Read it before changing the Pine for this indicator.
 
 - `DVA` = Development Value Area, or `area de valor en desarrollo actual`.
 - `PVA` = Previous Value Area, or `area de valor previa`.
+- `anchor` = snapshot anchor. This is the term we use in conversation when we refer to the effective timeframe/anchor that determines the DVA mode.
 - If a term here does not match the exact Pine variable name, this glossary defines the meaning.
 
 ## Core concepts
@@ -19,6 +20,7 @@ Read it before changing the Pine for this indicator.
 | Previous rectangle | Static rectangle drawn from previous `+1` to previous `-1` |
 | Previous `0.5` line | Dotted midpoint between previous `VWAP` and previous `+1` / `-1` |
 | Previous `1.5` line | Dotted midpoint between previous `+1` and `+2` / `-1` and `-2` |
+| Dominant area | The area that has priority in the current anchor window before the switch to the active DVA |
 | Annual mode | Resets every year, displayed on daily chart |
 | Quarterly mode | Resets every quarter, displayed on `8H` chart |
 | Monthly mode | Resets every month, displayed on `2H` chart |
@@ -31,6 +33,9 @@ Read it before changing the Pine for this indicator.
 - `8h` charts map to `Quarter` and use `quarterColor` (`#FFA500`).
 - `2h` charts map to `Month` and use `monthColor` (`#00FFFF`).
 - `30m` charts map to `Week` and use `weekColor` (`#FC4AAC`).
+- In snapshot version `v7`, `1M` / `M` use the `Decade` anchor and `1W` / `W` use the `HalfDecade` anchor. The `2h` and `30m` mappings remain `Month` and `Week`.
+- In snapshot version `v8`, the snapshot also reports `dominant_area` with the current switch window and the area that is currently in control.
+- In snapshot version `v11`, the snapshot also reports `price_close`, `price_position_dominant_area`, and a `narrative` block built from the dominant area rules. Exact touches are counted as `Inside`. The human-facing label for the price-position field is `Price Positions`.
 - `5m` charts map to `Session` and use `sessionColor` (`#FFFF00`).
 - The Pine source resolves this with timeframe flags, not raw strings, so `D` and `1D` behave the same.
 - In the current indicator, `Session` is the internal label used for the `5m` timeframe that represents the daily-period view.

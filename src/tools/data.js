@@ -93,8 +93,13 @@ export function registerDataTools(server) {
     catch (err) { return jsonResult({ success: false, error: err.message }, true); }
   });
 
-  server.tool('data_get_study_values', 'Get current indicator values from the data window for all visible studies (RSI, MACD, Bollinger Bands, EMAs, custom indicators with plot()).', {}, async () => {
+  server.tool('data_get_study_values', 'Get current indicator values from the data window for all visible studies (RSI, MACD, Bollinger Bands, EMAs, custom indicators with plot()). For Vwap MantillaPB, also returns derived DVA period snapshots with current and previous ranges.', {}, async () => {
     try { return jsonResult(await core.getStudyValues()); }
+    catch (err) { return jsonResult({ success: false, error: err.message }, true); }
+  });
+
+  server.tool('data_get_dva_snapshot', 'Get the versioned DVA snapshot for Vwap MantillaPB, including the current period area of value, the previous completed area of value, the dominant_area window, the price_close field, the price_position_dominant_area field, and the narrative block with direction, type, FCS, and pullback state. On 2h, the indicator is treated as monthly. On 30m, it is treated as weekly. On 1M, the anchor is Decade. On 1W, the anchor is HalfDecade.', {}, async () => {
+    try { return jsonResult(await core.getDvaSnapshot()); }
     catch (err) { return jsonResult({ success: false, error: err.message }, true); }
   });
 }

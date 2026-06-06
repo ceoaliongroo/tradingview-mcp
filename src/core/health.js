@@ -273,7 +273,21 @@ export async function launch({ port, kill_existing } = {}) {
     } catch { /* may not be running */ }
   }
 
-  const child = spawn(tvPath, [`--remote-debugging-port=${cdpPort}`], { detached: true, stdio: 'ignore' });
+  const isWindowsStoreApp = platform === 'win32' && /\\WindowsApps\\/i.test(tvPath);
+  const child = isWindowsStoreApp
+    ? spawn('powershell.exe', [
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-Command',
+        [
+          '$pkg = Get-AppxPackage *TradingView* | Select-Object -First 1',
+          'if (-not $pkg) { throw "TradingView Store package not found." }',
+          `$exe = ${JSON.stringify(tvPath)}`,
+          `Invoke-CommandInDesktopPackage -PackageFamilyName $pkg.PackageFamilyName -AppId 'TradingView.Desktop' -Command $exe -Args '--remote-debugging-port=${cdpPort}'`,
+        ].join('; '),
+      ], { detached: true, stdio: 'ignore' })
+    : spawn(tvPath, [`--remote-debugging-port=${cdpPort}`], { detached: true, stdio: 'ignore' });
   child.unref();
 
   for (let i = 0; i < 15; i++) {
