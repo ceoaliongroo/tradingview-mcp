@@ -1,0 +1,428 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// Mantilla PB DeMARK 9-13 is an independent public-rule approximation intended for visual calibration.
+//@version=6
+indicator("Mantilla PB DeMARK 9-13", shorttitle="MPB D913", overlay=true, max_labels_count=500, max_lines_count=120, max_boxes_count=40)
+
+setupGroup = "Setup Settings"
+seqGroup = "Sequential Countdown"
+comboGroup = "Combo Countdown"
+levelGroup = "TDST and Risk Levels"
+recycleGroup = "Recycle"
+displayGroup = "Display"
+colorGroup = "Colors"
+
+requirePriceFlip = input.bool(true, "Require Price Flip", group=setupGroup)
+inclusiveSetupComparison = input.bool(false, "Inclusive Setup Comparison", group=setupGroup)
+perfectionMode = input.string("Immediate", "Perfection Mode", options=["Immediate", "Delayed Until Confirmed"], group=setupGroup)
+
+enableSequential = input.bool(true, "Enable Sequential Countdown", group=seqGroup)
+seqQualifier13v8 = input.bool(true, "13 vs 8 Qualifier", group=seqGroup)
+seqQualifier8v5 = input.bool(false, "8 vs 5 Qualifier", group=seqGroup)
+cancelSeqOnOppositeSetup = input.bool(true, "Cancel Sequential On Opposite Setup", group=seqGroup)
+cancelSeqOnTdstBreak = input.bool(false, "Cancel Sequential On TDST Break", group=seqGroup)
+
+enableCombo = input.bool(true, "Enable Combo Countdown", group=comboGroup)
+comboVersion = input.string("Standard", "Combo Version", options=["Standard", "Conservative", "Aggressive"], group=comboGroup)
+cancelComboOnOppositeSetup = input.bool(true, "Cancel Combo On Opposite Setup", group=comboGroup)
+
+showTdst = input.bool(true, "Show TDST Lines", group=levelGroup)
+extendTdst = input.bool(true, "Extend TDST Until Broken", group=levelGroup)
+enableSequentialRisk = input.bool(true, "Enable Sequential Risk Level", group=levelGroup)
+enableSequentialRiskZone = input.bool(true, "Enable Sequential Risk Zone", group=levelGroup)
+enableComboRisk = input.bool(true, "Enable Combo Risk Level", group=levelGroup)
+enableComboRiskZone = input.bool(true, "Enable Combo Risk Zone", group=levelGroup)
+
+enableRecycle = input.bool(true, "Enable Recycle", group=recycleGroup)
+recycleSetupCount = input.int(22, "Recycle Setup Count", minval=10, maxval=50, group=recycleGroup)
+recycleSequential = input.bool(true, "Recycle Sequential", group=recycleGroup)
+recycleCombo = input.bool(true, "Recycle Combo", group=recycleGroup)
+
+displayMode = input.string("All Counts", "Display Mode", options=["All Counts", "Clean"], group=displayGroup)
+showSetup = input.bool(true, "Show Setup Counts", group=displayGroup)
+showSequentialCounts = input.bool(true, "Show Sequential Counts", group=displayGroup)
+showComboCounts = input.bool(true, "Show Combo Counts", group=displayGroup)
+showPerfectedDots = input.bool(true, "Show Perfected Setup Dots", group=displayGroup)
+showCountdownPrefixes = input.bool(false, "Show Countdown Prefixes", group=displayGroup)
+maxManagedLabels = input.int(500, "Max Managed Labels", minval=100, maxval=500, group=displayGroup)
+maxManagedLines = input.int(100, "Max Managed Lines", minval=20, maxval=120, group=displayGroup)
+maxManagedBoxes = input.int(35, "Max Managed Boxes", minval=5, maxval=40, group=displayGroup)
+
+buySetupColor = input.color(color.rgb(0, 200, 83), "Buy Setup Color", group=colorGroup)
+sellSetupColor = input.color(color.rgb(0, 200, 83), "Sell Setup Color", group=colorGroup)
+buySequentialColor = input.color(color.rgb(255, 82, 82), "Buy Sequential Color", group=colorGroup)
+sellSequentialColor = input.color(color.rgb(255, 82, 82), "Sell Sequential Color", group=colorGroup)
+buyComboColor = input.color(color.rgb(41, 182, 246), "Buy Combo Color", group=colorGroup)
+sellComboColor = input.color(color.rgb(41, 182, 246), "Sell Combo Color", group=colorGroup)
+tdstSupportColor = input.color(color.rgb(0, 200, 83), "TDST Support Color", group=colorGroup)
+tdstResistanceColor = input.color(color.rgb(255, 82, 82), "TDST Resistance Color", group=colorGroup)
+seqRiskColor = input.color(color.rgb(255, 82, 82), "Sequential Risk Level Color", group=colorGroup)
+comboRiskColor = input.color(color.rgb(41, 182, 246), "Combo Risk Level Color", group=colorGroup)
+perfectedDotColor = input.color(color.white, "Perfected Setup Dot Color", group=colorGroup)
+
+var array<label> managedLabels = array.new<label>()
+var array<line> managedLines = array.new<line>()
+var array<box> managedBoxes = array.new<box>()
+
+trackLabel(label id) =>
+    if not na(id)
+        array.push(managedLabels, id)
+        if array.size(managedLabels) > maxManagedLabels
+            old = array.shift(managedLabels)
+            if not na(old)
+                label.delete(old)
+
+trackLine(line id) =>
+    if not na(id)
+        array.push(managedLines, id)
+        if array.size(managedLines) > maxManagedLines
+            old = array.shift(managedLines)
+            if not na(old)
+                line.delete(old)
+
+trackBox(box id) =>
+    if not na(id)
+        array.push(managedBoxes, id)
+        if array.size(managedBoxes) > maxManagedBoxes
+            old = array.shift(managedBoxes)
+            if not na(old)
+                box.delete(old)
+
+trueHigh() =>
+    na(close[1]) ? high : math.max(high, close[1])
+
+trueLow() =>
+    na(close[1]) ? low : math.min(low, close[1])
+
+setupCompare(bool isBuy) =>
+    enough = bar_index >= 4
+    if not enough
+        false
+    else if isBuy
+        inclusiveSetupComparison ? close <= close[4] : close < close[4]
+    else
+        inclusiveSetupComparison ? close >= close[4] : close > close[4]
+
+priceFlip(bool isBuy) =>
+    enough = bar_index >= 5
+    if not enough
+        false
+    else if isBuy
+        close[1] > close[5] and setupCompare(true)
+    else
+        close[1] < close[5] and setupCompare(false)
+
+calcSetup(bool condition, int previousCount, bool flipCondition, bool requireFlip) =>
+    canStart = not requireFlip or flipCondition
+    condition ? (previousCount > 0 ? previousCount + 1 : canStart ? 1 : 0) : 0
+
+isPerfectedSetup(bool isBuy, int setupCount) =>
+    if setupCount < 8
+        false
+    else if setupCount == 8
+        isBuy ? (low <= low[1] and low <= low[2]) : (high >= high[1] and high >= high[2])
+    else
+        bar8Perfect = isBuy ? (low[1] <= low[2] and low[1] <= low[3]) : (high[1] >= high[2] and high[1] >= high[3])
+        bar9Perfect = isBuy ? (low <= low[2] and low <= low[3]) : (high >= high[2] and high >= high[3])
+        bar8Perfect or bar9Perfect
+
+isPermanentCount(int count, bool isFinal) =>
+    isFinal or count == 9 or count == 13
+
+shouldRenderCount(int count, bool isFinal) =>
+    displayMode == "All Counts" or isPermanentCount(count, isFinal) or count > 0
+
+renderManagedCount(label previousActive, bool showIt, int count, string prefix, bool isBuy, color textColor, bool isFinal) =>
+    label nextActive = previousActive
+    if displayMode == "Clean" and not na(nextActive) and (not showIt or count <= 0)
+        label.delete(nextActive)
+        nextActive := na
+    else if showIt and count > 0 and shouldRenderCount(count, isFinal)
+        permanent = isPermanentCount(count, isFinal)
+        if displayMode == "Clean" and not permanent and not na(nextActive)
+            label.delete(nextActive)
+        labelStyle = isBuy ? label.style_label_up : label.style_label_down
+        y = isBuy ? low : high
+        yLoc = isBuy ? yloc.belowbar : yloc.abovebar
+        newLabel = label.new(bar_index, y, prefix + str.tostring(count), style=labelStyle, yloc=yLoc, textcolor=textColor, color=color.new(color.black, 100), size=size.tiny)
+        trackLabel(newLabel)
+        nextActive := displayMode == "Clean" and not permanent ? newLabel : na
+    nextActive
+
+renderCount(bool showIt, int count, string prefix, bool isBuy, color textColor, bool isFinal) =>
+    renderManagedCount(na, showIt, count, prefix, isBuy, textColor, isFinal)
+
+renderToken(bool showIt, string token, bool isBuy, color textColor) =>
+    if showIt
+        labelStyle = isBuy ? label.style_label_up : label.style_label_down
+        y = isBuy ? low : high
+        yLoc = isBuy ? yloc.belowbar : yloc.abovebar
+        newLabel = label.new(bar_index, y, token, style=labelStyle, yloc=yLoc, textcolor=textColor, color=color.new(color.black, 100), size=size.tiny)
+        trackLabel(newLabel)
+
+updateTdstLine(line currentLine, bool isSupport, float levelValue, color lineColor) =>
+    line result = currentLine
+    if showTdst and not na(levelValue)
+        if not na(result)
+            line.delete(result)
+        result := line.new(bar_index, levelValue, bar_index + 1, levelValue, extend=extendTdst ? extend.right : extend.none, color=lineColor, width=1, style=line.style_solid)
+        trackLine(result)
+    result
+
+sequentialQualifies(bool isBuy) =>
+    bar_index >= 2 and (isBuy ? close <= low[2] : close >= high[2])
+
+comboQualifies(bool isBuy, string version, int currentCount) =>
+    enough = bar_index >= 2
+    base = enough and (isBuy ? close <= low[2] : close >= high[2])
+    conservative = base and (isBuy ? close < close[1] : close > close[1])
+    aggressive = enough and (isBuy ? low <= low[2] : high >= high[2])
+    version == "Aggressive" ? aggressive : version == "Conservative" ? conservative : base
+
+calcRiskLevel(bool isBuy, float extremeValue, float referenceClose) =>
+    span = math.abs(extremeValue - referenceClose)
+    isBuy ? extremeValue - span : extremeValue + span
+
+recycleTriggered(bool isBuy, int setupCount, bool countdownActive) =>
+    enableRecycle and countdownActive and setupCount >= recycleSetupCount
+
+drawRisk(line currentLine, box currentBox, bool enabledLine, bool enabledZone, bool isBuy, float riskLevel, color lineColor) =>
+    line nextLine = currentLine
+    box nextBox = currentBox
+    if not na(riskLevel)
+        if enabledLine
+            if not na(nextLine)
+                line.delete(nextLine)
+            nextLine := line.new(bar_index, riskLevel, bar_index + 1, riskLevel, extend=extend.right, color=lineColor, width=1, style=line.style_dashed)
+            trackLine(nextLine)
+        if enabledZone
+            if not na(nextBox)
+                box.delete(nextBox)
+            zoneTop = isBuy ? close : riskLevel
+            zoneBottom = isBuy ? riskLevel : close
+            nextBox := box.new(left=bar_index, top=zoneTop, right=bar_index + 1, bottom=zoneBottom, bgcolor=color.new(lineColor, 88), border_color=color.new(lineColor, 70), extend=extend.right)
+            trackBox(nextBox)
+    [nextLine, nextBox]
+
+var int buySetup = 0
+var int sellSetup = 0
+var float buySetupLowestTrueLow = na
+var float buySetupHighestTrueHigh = na
+var float sellSetupLowestTrueLow = na
+var float sellSetupHighestTrueHigh = na
+var line buyTdstResistance = na
+var line sellTdstSupport = na
+var label activeBuySetupLabel = na
+var label activeSellSetupLabel = na
+
+buyCondition = setupCompare(true)
+sellCondition = setupCompare(false)
+nextBuySetup = calcSetup(buyCondition, buySetup, priceFlip(true), requirePriceFlip)
+nextSellSetup = calcSetup(sellCondition, sellSetup, priceFlip(false), requirePriceFlip)
+
+if nextBuySetup == 1
+    buySetupLowestTrueLow := trueLow()
+    buySetupHighestTrueHigh := trueHigh()
+else if nextBuySetup > 1
+    buySetupLowestTrueLow := math.min(nz(buySetupLowestTrueLow, trueLow()), trueLow())
+    buySetupHighestTrueHigh := math.max(nz(buySetupHighestTrueHigh, trueHigh()), trueHigh())
+else
+    buySetupLowestTrueLow := na
+    buySetupHighestTrueHigh := na
+
+if nextSellSetup == 1
+    sellSetupLowestTrueLow := trueLow()
+    sellSetupHighestTrueHigh := trueHigh()
+else if nextSellSetup > 1
+    sellSetupLowestTrueLow := math.min(nz(sellSetupLowestTrueLow, trueLow()), trueLow())
+    sellSetupHighestTrueHigh := math.max(nz(sellSetupHighestTrueHigh, trueHigh()), trueHigh())
+else
+    sellSetupLowestTrueLow := na
+    sellSetupHighestTrueHigh := na
+
+buySetup := nextBuySetup
+sellSetup := nextSellSetup
+
+buySetupComplete = buySetup == 9
+sellSetupComplete = sellSetup == 9
+buyPerfected = isPerfectedSetup(true, buySetup)
+sellPerfected = isPerfectedSetup(false, sellSetup)
+
+if showSetup
+    activeBuySetupLabel := renderManagedCount(activeBuySetupLabel, buySetup <= 9, buySetup, "", true, buySetupColor, buySetupComplete)
+    activeSellSetupLabel := renderManagedCount(activeSellSetupLabel, sellSetup <= 9, sellSetup, "", false, sellSetupColor, sellSetupComplete)
+else
+    activeBuySetupLabel := renderManagedCount(activeBuySetupLabel, false, 0, "", true, buySetupColor, false)
+    activeSellSetupLabel := renderManagedCount(activeSellSetupLabel, false, 0, "", false, sellSetupColor, false)
+
+plotshape(showPerfectedDots and buyPerfected and (perfectionMode == "Immediate" or buySetup >= 9), title="Buy Perfected Setup", style=shape.circle, location=location.belowbar, color=perfectedDotColor, size=size.tiny)
+plotshape(showPerfectedDots and sellPerfected and (perfectionMode == "Immediate" or sellSetup >= 9), title="Sell Perfected Setup", style=shape.circle, location=location.abovebar, color=perfectedDotColor, size=size.tiny)
+
+if buySetupComplete
+    buyTdstResistance := updateTdstLine(buyTdstResistance, false, buySetupHighestTrueHigh, tdstResistanceColor)
+if sellSetupComplete
+    sellTdstSupport := updateTdstLine(sellTdstSupport, true, sellSetupLowestTrueLow, tdstSupportColor)
+
+var bool buySeqActive = false
+var bool sellSeqActive = false
+var int buySeq = 0
+var int sellSeq = 0
+var float buySeqClose5 = na
+var float sellSeqClose5 = na
+var float buySeqClose8 = na
+var float sellSeqClose8 = na
+var float buySeqLow8 = na
+var float sellSeqHigh8 = na
+var float buySeqExtreme = na
+var float sellSeqExtreme = na
+var line buySeqRiskLine = na
+var line sellSeqRiskLine = na
+var box buySeqRiskBox = na
+var box sellSeqRiskBox = na
+var label activeBuySeqLabel = na
+var label activeSellSeqLabel = na
+
+if enableSequential and buySetupComplete
+    buySeqActive := true
+    buySeq := 0
+    buySeqClose5 := na
+    buySeqClose8 := na
+    buySeqLow8 := na
+    buySeqExtreme := low
+if enableSequential and sellSetupComplete
+    sellSeqActive := true
+    sellSeq := 0
+    sellSeqClose5 := na
+    sellSeqClose8 := na
+    sellSeqHigh8 := na
+    sellSeqExtreme := high
+
+if cancelSeqOnOppositeSetup
+    if sellSetupComplete
+        buySeqActive := false
+    if buySetupComplete
+        sellSeqActive := false
+
+if cancelSeqOnTdstBreak
+    if buySeqActive and not na(buyTdstResistance) and trueHigh() > line.get_y1(buyTdstResistance)
+        buySeqActive := false
+    if sellSeqActive and not na(sellTdstSupport) and trueLow() < line.get_y1(sellTdstSupport)
+        sellSeqActive := false
+
+if enableSequential and buySeqActive and sequentialQualifies(true)
+    candidate = buySeq + 1
+    blocked8 = candidate == 8 and seqQualifier8v5 and not na(buySeqClose5) and not (low <= buySeqClose5)
+    blocked13 = candidate == 13 and seqQualifier13v8 and not na(buySeqClose8) and not (low <= buySeqClose8)
+    if blocked8 or blocked13
+        renderToken(showSequentialCounts, "+", true, buySequentialColor)
+    else
+        buySeq := candidate
+        buySeqExtreme := math.min(nz(buySeqExtreme, low), low)
+        if buySeq == 5
+            buySeqClose5 := close
+        if buySeq == 8
+            buySeqClose8 := close
+            buySeqLow8 := low
+        seqPrefix = showCountdownPrefixes ? "S" : ""
+        activeBuySeqLabel := renderManagedCount(activeBuySeqLabel, showSequentialCounts, buySeq, seqPrefix, true, buySequentialColor, buySeq == 13)
+        if buySeq == 13
+            buyRisk = calcRiskLevel(true, buySeqExtreme, close)
+            [nextBuySeqRiskLine, nextBuySeqRiskBox] = drawRisk(buySeqRiskLine, buySeqRiskBox, enableSequentialRisk, enableSequentialRiskZone, true, buyRisk, seqRiskColor)
+            buySeqRiskLine := nextBuySeqRiskLine
+            buySeqRiskBox := nextBuySeqRiskBox
+            buySeqActive := false
+
+if enableSequential and sellSeqActive and sequentialQualifies(false)
+    candidate = sellSeq + 1
+    blocked8 = candidate == 8 and seqQualifier8v5 and not na(sellSeqClose5) and not (high >= sellSeqClose5)
+    blocked13 = candidate == 13 and seqQualifier13v8 and not na(sellSeqClose8) and not (high >= sellSeqClose8)
+    if blocked8 or blocked13
+        renderToken(showSequentialCounts, "+", false, sellSequentialColor)
+    else
+        sellSeq := candidate
+        sellSeqExtreme := math.max(nz(sellSeqExtreme, high), high)
+        if sellSeq == 5
+            sellSeqClose5 := close
+        if sellSeq == 8
+            sellSeqClose8 := close
+            sellSeqHigh8 := high
+        seqPrefix = showCountdownPrefixes ? "S" : ""
+        activeSellSeqLabel := renderManagedCount(activeSellSeqLabel, showSequentialCounts, sellSeq, seqPrefix, false, sellSequentialColor, sellSeq == 13)
+        if sellSeq == 13
+            sellRisk = calcRiskLevel(false, sellSeqExtreme, close)
+            [nextSellSeqRiskLine, nextSellSeqRiskBox] = drawRisk(sellSeqRiskLine, sellSeqRiskBox, enableSequentialRisk, enableSequentialRiskZone, false, sellRisk, seqRiskColor)
+            sellSeqRiskLine := nextSellSeqRiskLine
+            sellSeqRiskBox := nextSellSeqRiskBox
+            sellSeqActive := false
+
+var bool buyComboActive = false
+var bool sellComboActive = false
+var int buyCombo = 0
+var int sellCombo = 0
+var float buyComboExtreme = na
+var float sellComboExtreme = na
+var line buyComboRiskLine = na
+var line sellComboRiskLine = na
+var box buyComboRiskBox = na
+var box sellComboRiskBox = na
+var label activeBuyComboLabel = na
+var label activeSellComboLabel = na
+
+if enableCombo and buySetupComplete
+    buyComboActive := true
+    buyCombo := 0
+    buyComboExtreme := low
+if enableCombo and sellSetupComplete
+    sellComboActive := true
+    sellCombo := 0
+    sellComboExtreme := high
+
+if cancelComboOnOppositeSetup
+    if sellSetupComplete
+        buyComboActive := false
+    if buySetupComplete
+        sellComboActive := false
+
+if enableCombo and buyComboActive and comboQualifies(true, comboVersion, buyCombo)
+    buyCombo += 1
+    buyComboExtreme := math.min(nz(buyComboExtreme, low), low)
+    comboPrefix = showCountdownPrefixes ? "C" : ""
+    activeBuyComboLabel := renderManagedCount(activeBuyComboLabel, showComboCounts, buyCombo, comboPrefix, true, buyComboColor, buyCombo == 13)
+    if buyCombo == 13
+        buyComboRisk = calcRiskLevel(true, buyComboExtreme, close)
+        [nextBuyComboRiskLine, nextBuyComboRiskBox] = drawRisk(buyComboRiskLine, buyComboRiskBox, enableComboRisk, enableComboRiskZone, true, buyComboRisk, comboRiskColor)
+        buyComboRiskLine := nextBuyComboRiskLine
+        buyComboRiskBox := nextBuyComboRiskBox
+        buyComboActive := false
+
+if enableCombo and sellComboActive and comboQualifies(false, comboVersion, sellCombo)
+    sellCombo += 1
+    sellComboExtreme := math.max(nz(sellComboExtreme, high), high)
+    comboPrefix = showCountdownPrefixes ? "C" : ""
+    activeSellComboLabel := renderManagedCount(activeSellComboLabel, showComboCounts, sellCombo, comboPrefix, false, sellComboColor, sellCombo == 13)
+    if sellCombo == 13
+        sellComboRisk = calcRiskLevel(false, sellComboExtreme, close)
+        [nextSellComboRiskLine, nextSellComboRiskBox] = drawRisk(sellComboRiskLine, sellComboRiskBox, enableComboRisk, enableComboRiskZone, false, sellComboRisk, comboRiskColor)
+        sellComboRiskLine := nextSellComboRiskLine
+        sellComboRiskBox := nextSellComboRiskBox
+        sellComboActive := false
+
+buyRecycle = recycleTriggered(true, buySetup, buySeqActive or buyComboActive)
+sellRecycle = recycleTriggered(false, sellSetup, sellSeqActive or sellComboActive)
+
+if buyRecycle
+    if recycleSequential and buySeqActive
+        buySeq := 0
+        buySeqActive := false
+    if recycleCombo and buyComboActive
+        buyCombo := 0
+        buyComboActive := false
+    renderToken(true, "R", true, buySetupColor)
+
+if sellRecycle
+    if recycleSequential and sellSeqActive
+        sellSeq := 0
+        sellSeqActive := false
+    if recycleCombo and sellComboActive
+        sellCombo := 0
+        sellComboActive := false
+    renderToken(true, "R", false, sellSetupColor)
