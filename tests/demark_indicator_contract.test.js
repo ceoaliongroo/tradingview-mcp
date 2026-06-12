@@ -52,6 +52,7 @@ describe('Mantilla PB DeMARK 9-13 indicator contract', () => {
       'Enable Recycle',
       'Recycle Setup Count',
       'Display Mode',
+      'Count Label Size',
       'Max Managed Labels',
       'Max Managed Lines',
       'Max Managed Boxes',
@@ -74,6 +75,16 @@ describe('Mantilla PB DeMARK 9-13 indicator contract', () => {
     ]) {
       assert.match(pine, new RegExp(`${label} = input\\.color\\(color\\.rgb\\(${rgb}\\)`), `unexpected default for ${label}`);
     }
+  });
+
+  it('separates count families and refreshes active realtime labels', () => {
+    const pine = source();
+    assert.match(pine, /countLabelSize = input\.string\("Normal"/);
+    assert.match(pine, /countY\(isBuy, lane, 0\)/);
+    assert.match(pine, /label\.get_x\(nextActive\) == bar_index/);
+    assert.match(pine, /buySetup.*buySetupColor.*buySetupComplete, 1/s);
+    assert.match(pine, /showSequentialCounts.*buySequentialColor.*buySeq == 13, 2/s);
+    assert.match(pine, /showComboCounts.*buyComboColor.*buyCombo == 13, 3/s);
   });
 
   it('implements named engines for setup, TDST, countdowns, risk, and recycling', () => {

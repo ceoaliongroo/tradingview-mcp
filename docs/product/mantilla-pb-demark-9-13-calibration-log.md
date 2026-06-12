@@ -139,3 +139,24 @@ Invalid first-pass screenshots, kept only as debugging evidence because Mantilla
 - `screenshots/mantilla-demark-overlay-btcusd-d-20260611.png`
 - `screenshots/mantilla-demark-overlay-googl-d-20260611.png`
 - `screenshots/mantilla-demark-overlay-tsla-d-20260611.png`
+
+## 2026-06-12: Sequential and Combo Correction Pass
+
+```text
+Scope: Updated Mantilla PB DeMARK 9-13 after confirming Setup count was visually acceptable. Focused on Sequential red counts and Combo blue counts, plus stacked label positioning for easier 1:1 overlay review.
+Implementation update: Sequential TDST cancellation now follows true-low/true-high direction from the NinjaTrader reference. Combo now uses the public/NT four-condition countdown rules, keeps last combo low/high/close state, seeds Combo retrospectively from setup bars 1-8 on setup completion, and cancels against setup bar-1 high/low. Active labels on the live/current bar are deleted and redrawn so the latest bar updates instead of inheriting the NinjaTrader live-bar bug.
+Display update: Added Count Label Size default Normal, which is materially larger than the previous tiny labels. Setup, Sequential, Combo, and recycle/qualifier tokens now render on separate vertical lanes to reduce overlap.
+Tooling update: Fixed the local Pine editor helper to prefer the visible Monaco editor when TradingView has both hidden and visible Pine editors in the DOM. This restored file-based Pine injection through the CLI.
+Technical verification: Contract test passes 7/7. TradingView server-side Pine check compiles with 0 errors; TradingView editor reports consistency warnings for drawing helper functions but no blocking compile errors. Script was loaded into the live chart and TradingView showed the script update as applied/saved.
+Visual verification: Captured overlays for SPY, QQQ, BTCUSD, GOOGL, and TSLA daily charts with paid DeMARK 9-13 and Mantilla visible together. MCP label extraction confirms the paid study and Mantilla study both expose large label sets and that Mantilla now emits 10-13 countdown labels.
+Known mismatch risk: The paid indicator packs multiple count families into one label with newline offsets, while Mantilla uses separate labels with price offsets. Counts are now visible, but exact family classification and vertical placement still need human visual review, especially on GOOGL and TSLA where recent extracted labels differ.
+Status: Awaiting user visual verification before the next correction pass or strategy phase.
+```
+
+Screenshots:
+
+- `screenshots/mantilla-overlay-spy-d-seqcombo.png`
+- `screenshots/mantilla-overlay-qqq-d-seqcombo.png`
+- `screenshots/mantilla-overlay-btcusd-d-seqcombo.png`
+- `screenshots/mantilla-overlay-googl-d-seqcombo.png`
+- `screenshots/mantilla-overlay-tsla-d-seqcombo.png`
