@@ -34,7 +34,7 @@ enableComboRiskZone = input.bool(true, "Enable Combo Risk Zone", group=levelGrou
 
 enableRecycle = input.bool(true, "Enable Recycle", group=recycleGroup)
 recycleSetupCount = input.int(22, "Recycle Setup Count", minval=10, maxval=50, group=recycleGroup)
-recycleSequential = input.bool(true, "Recycle Sequential", group=recycleGroup)
+recycleSequential = input.bool(false, "Recycle Sequential", group=recycleGroup)
 recycleCombo = input.bool(true, "Recycle Combo", group=recycleGroup)
 
 displayMode = input.string("All Counts", "Display Mode", options=["All Counts", "Clean"], group=displayGroup)
@@ -282,18 +282,16 @@ if buySetupComplete
 if sellSetupComplete
     sellTdstSupport := updateTdstLine(sellTdstSupport, true, sellSetupLowestTrueLow, tdstSupportColor)
 
-var bool buySeqActive = false
-var bool sellSeqActive = false
-var int buySeq = 0
-var int sellSeq = 0
-var float buySeqClose5 = na
-var float sellSeqClose5 = na
-var float buySeqClose8 = na
-var float sellSeqClose8 = na
-var float buySeqLow8 = na
-var float sellSeqHigh8 = na
-var float buySeqExtreme = na
-var float sellSeqExtreme = na
+var array<int> buySeqCounts = array.new<int>()
+var array<float> buySeqClose5s = array.new<float>()
+var array<float> buySeqClose8s = array.new<float>()
+var array<float> buySeqExtremes = array.new<float>()
+var array<float> buySeqTdstLevels = array.new<float>()
+var array<int> sellSeqCounts = array.new<int>()
+var array<float> sellSeqClose5s = array.new<float>()
+var array<float> sellSeqClose8s = array.new<float>()
+var array<float> sellSeqExtremes = array.new<float>()
+var array<float> sellSeqTdstLevels = array.new<float>()
 var line buySeqRiskLine = na
 var line sellSeqRiskLine = na
 var box buySeqRiskBox = na
@@ -302,77 +300,129 @@ var label activeBuySeqLabel = na
 var label activeSellSeqLabel = na
 
 if enableSequential and buySetupComplete
-    buySeqActive := true
-    buySeq := 0
-    buySeqClose5 := na
-    buySeqClose8 := na
-    buySeqLow8 := na
-    buySeqExtreme := low
+    array.push(buySeqCounts, 0)
+    array.push(buySeqClose5s, na)
+    array.push(buySeqClose8s, na)
+    array.push(buySeqExtremes, low)
+    array.push(buySeqTdstLevels, buySetupHighestTrueHigh)
 if enableSequential and sellSetupComplete
-    sellSeqActive := true
-    sellSeq := 0
-    sellSeqClose5 := na
-    sellSeqClose8 := na
-    sellSeqHigh8 := na
-    sellSeqExtreme := high
+    array.push(sellSeqCounts, 0)
+    array.push(sellSeqClose5s, na)
+    array.push(sellSeqClose8s, na)
+    array.push(sellSeqExtremes, high)
+    array.push(sellSeqTdstLevels, sellSetupLowestTrueLow)
 
 if cancelSeqOnOppositeSetup
     if sellSetupComplete
-        buySeqActive := false
+        array.clear(buySeqCounts)
+        array.clear(buySeqClose5s)
+        array.clear(buySeqClose8s)
+        array.clear(buySeqExtremes)
+        array.clear(buySeqTdstLevels)
     if buySetupComplete
-        sellSeqActive := false
+        array.clear(sellSeqCounts)
+        array.clear(sellSeqClose5s)
+        array.clear(sellSeqClose8s)
+        array.clear(sellSeqExtremes)
+        array.clear(sellSeqTdstLevels)
 
-if cancelSeqOnTdstBreak
-    if buySeqActive and not na(buyTdstResistance) and trueLow() > line.get_y1(buyTdstResistance)
-        buySeqActive := false
-    if sellSeqActive and not na(sellTdstSupport) and trueHigh() < line.get_y1(sellTdstSupport)
-        sellSeqActive := false
-
-if enableSequential and buySeqActive and sequentialQualifies(true)
-    candidate = buySeq + 1
-    blocked8 = candidate == 8 and seqQualifier8v5 and not na(buySeqClose5) and not (low <= buySeqClose5)
-    blocked13 = candidate == 13 and seqQualifier13v8 and not na(buySeqClose8) and not (low <= buySeqClose8)
-    if blocked8 or blocked13
-        renderToken(showSequentialCounts, "+", true, buySequentialColor)
+bool drewBuySeqThisBar = false
+int buySeqIndex = 0
+while buySeqIndex < array.size(buySeqCounts)
+    buySeqTdst = array.get(buySeqTdstLevels, buySeqIndex)
+    buySeqCancelled = cancelSeqOnTdstBreak and not na(buySeqTdst) and trueLow() > buySeqTdst
+    if buySeqCancelled
+        array.remove(buySeqCounts, buySeqIndex)
+        array.remove(buySeqClose5s, buySeqIndex)
+        array.remove(buySeqClose8s, buySeqIndex)
+        array.remove(buySeqExtremes, buySeqIndex)
+        array.remove(buySeqTdstLevels, buySeqIndex)
     else
-        buySeq := candidate
-        buySeqExtreme := math.min(nz(buySeqExtreme, low), low)
-        if buySeq == 5
-            buySeqClose5 := close
-        if buySeq == 8
-            buySeqClose8 := close
-            buySeqLow8 := low
-        seqPrefix = showCountdownPrefixes ? "S" : ""
-        activeBuySeqLabel := renderManagedCount(activeBuySeqLabel, showSequentialCounts, buySeq, seqPrefix, true, buySequentialColor, buySeq == 13, 2)
-        if buySeq == 13
-            buyRisk = calcRiskLevel(true, buySeqExtreme, close)
-            [nextBuySeqRiskLine, nextBuySeqRiskBox] = drawRisk(buySeqRiskLine, buySeqRiskBox, enableSequentialRisk, enableSequentialRiskZone, true, buyRisk, seqRiskColor)
-            buySeqRiskLine := nextBuySeqRiskLine
-            buySeqRiskBox := nextBuySeqRiskBox
-            buySeqActive := false
+        if enableSequential and sequentialQualifies(true)
+            currentCount = array.get(buySeqCounts, buySeqIndex)
+            candidate = currentCount + 1
+            close5 = array.get(buySeqClose5s, buySeqIndex)
+            close8 = array.get(buySeqClose8s, buySeqIndex)
+            blocked8 = candidate == 8 and seqQualifier8v5 and not na(close5) and not (low <= close5)
+            blocked13 = candidate == 13 and seqQualifier13v8 and not na(close8) and not (low <= close8)
+            shouldDraw = not drewBuySeqThisBar
+            if blocked8 or blocked13
+                if shouldDraw
+                    renderToken(showSequentialCounts, "+", true, buySequentialColor)
+                    drewBuySeqThisBar := true
+            else
+                array.set(buySeqCounts, buySeqIndex, candidate)
+                nextExtreme = math.min(nz(array.get(buySeqExtremes, buySeqIndex), low), low)
+                array.set(buySeqExtremes, buySeqIndex, nextExtreme)
+                if candidate == 5
+                    array.set(buySeqClose5s, buySeqIndex, close)
+                if candidate == 8
+                    array.set(buySeqClose8s, buySeqIndex, close)
+                if shouldDraw
+                    seqPrefix = showCountdownPrefixes ? "S" : ""
+                    activeBuySeqLabel := renderManagedCount(activeBuySeqLabel, showSequentialCounts, candidate, seqPrefix, true, buySequentialColor, candidate == 13, 2)
+                    drewBuySeqThisBar := true
+                if candidate == 13
+                    buyRisk = calcRiskLevel(true, nextExtreme, close)
+                    [nextBuySeqRiskLine, nextBuySeqRiskBox] = drawRisk(buySeqRiskLine, buySeqRiskBox, enableSequentialRisk, enableSequentialRiskZone, true, buyRisk, seqRiskColor)
+                    buySeqRiskLine := nextBuySeqRiskLine
+                    buySeqRiskBox := nextBuySeqRiskBox
+                    array.remove(buySeqCounts, buySeqIndex)
+                    array.remove(buySeqClose5s, buySeqIndex)
+                    array.remove(buySeqClose8s, buySeqIndex)
+                    array.remove(buySeqExtremes, buySeqIndex)
+                    array.remove(buySeqTdstLevels, buySeqIndex)
+                    buySeqIndex -= 1
+        buySeqIndex += 1
 
-if enableSequential and sellSeqActive and sequentialQualifies(false)
-    candidate = sellSeq + 1
-    blocked8 = candidate == 8 and seqQualifier8v5 and not na(sellSeqClose5) and not (high >= sellSeqClose5)
-    blocked13 = candidate == 13 and seqQualifier13v8 and not na(sellSeqClose8) and not (high >= sellSeqClose8)
-    if blocked8 or blocked13
-        renderToken(showSequentialCounts, "+", false, sellSequentialColor)
+bool drewSellSeqThisBar = false
+int sellSeqIndex = 0
+while sellSeqIndex < array.size(sellSeqCounts)
+    sellSeqTdst = array.get(sellSeqTdstLevels, sellSeqIndex)
+    sellSeqCancelled = cancelSeqOnTdstBreak and not na(sellSeqTdst) and trueHigh() < sellSeqTdst
+    if sellSeqCancelled
+        array.remove(sellSeqCounts, sellSeqIndex)
+        array.remove(sellSeqClose5s, sellSeqIndex)
+        array.remove(sellSeqClose8s, sellSeqIndex)
+        array.remove(sellSeqExtremes, sellSeqIndex)
+        array.remove(sellSeqTdstLevels, sellSeqIndex)
     else
-        sellSeq := candidate
-        sellSeqExtreme := math.max(nz(sellSeqExtreme, high), high)
-        if sellSeq == 5
-            sellSeqClose5 := close
-        if sellSeq == 8
-            sellSeqClose8 := close
-            sellSeqHigh8 := high
-        seqPrefix = showCountdownPrefixes ? "S" : ""
-        activeSellSeqLabel := renderManagedCount(activeSellSeqLabel, showSequentialCounts, sellSeq, seqPrefix, false, sellSequentialColor, sellSeq == 13, 2)
-        if sellSeq == 13
-            sellRisk = calcRiskLevel(false, sellSeqExtreme, close)
-            [nextSellSeqRiskLine, nextSellSeqRiskBox] = drawRisk(sellSeqRiskLine, sellSeqRiskBox, enableSequentialRisk, enableSequentialRiskZone, false, sellRisk, seqRiskColor)
-            sellSeqRiskLine := nextSellSeqRiskLine
-            sellSeqRiskBox := nextSellSeqRiskBox
-            sellSeqActive := false
+        if enableSequential and sequentialQualifies(false)
+            currentCount = array.get(sellSeqCounts, sellSeqIndex)
+            candidate = currentCount + 1
+            close5 = array.get(sellSeqClose5s, sellSeqIndex)
+            close8 = array.get(sellSeqClose8s, sellSeqIndex)
+            blocked8 = candidate == 8 and seqQualifier8v5 and not na(close5) and not (high >= close5)
+            blocked13 = candidate == 13 and seqQualifier13v8 and not na(close8) and not (high >= close8)
+            shouldDraw = not drewSellSeqThisBar
+            if blocked8 or blocked13
+                if shouldDraw
+                    renderToken(showSequentialCounts, "+", false, sellSequentialColor)
+                    drewSellSeqThisBar := true
+            else
+                array.set(sellSeqCounts, sellSeqIndex, candidate)
+                nextExtreme = math.max(nz(array.get(sellSeqExtremes, sellSeqIndex), high), high)
+                array.set(sellSeqExtremes, sellSeqIndex, nextExtreme)
+                if candidate == 5
+                    array.set(sellSeqClose5s, sellSeqIndex, close)
+                if candidate == 8
+                    array.set(sellSeqClose8s, sellSeqIndex, close)
+                if shouldDraw
+                    seqPrefix = showCountdownPrefixes ? "S" : ""
+                    activeSellSeqLabel := renderManagedCount(activeSellSeqLabel, showSequentialCounts, candidate, seqPrefix, false, sellSequentialColor, candidate == 13, 2)
+                    drewSellSeqThisBar := true
+                if candidate == 13
+                    sellRisk = calcRiskLevel(false, nextExtreme, close)
+                    [nextSellSeqRiskLine, nextSellSeqRiskBox] = drawRisk(sellSeqRiskLine, sellSeqRiskBox, enableSequentialRisk, enableSequentialRiskZone, false, sellRisk, seqRiskColor)
+                    sellSeqRiskLine := nextSellSeqRiskLine
+                    sellSeqRiskBox := nextSellSeqRiskBox
+                    array.remove(sellSeqCounts, sellSeqIndex)
+                    array.remove(sellSeqClose5s, sellSeqIndex)
+                    array.remove(sellSeqClose8s, sellSeqIndex)
+                    array.remove(sellSeqExtremes, sellSeqIndex)
+                    array.remove(sellSeqTdstLevels, sellSeqIndex)
+                    sellSeqIndex -= 1
+        sellSeqIndex += 1
 
 var bool buyComboActive = false
 var bool sellComboActive = false
@@ -470,22 +520,28 @@ if enableCombo and sellComboActive and comboQualifies(false, comboVersion, na, s
         sellComboRiskBox := nextSellComboRiskBox
         sellComboActive := false
 
-buyRecycle = recycleTriggered(true, buySetup, buySeqActive or buyComboActive)
-sellRecycle = recycleTriggered(false, sellSetup, sellSeqActive or sellComboActive)
+buyRecycle = recycleTriggered(true, buySetup, array.size(buySeqCounts) > 0 or buyComboActive)
+sellRecycle = recycleTriggered(false, sellSetup, array.size(sellSeqCounts) > 0 or sellComboActive)
 
 if buyRecycle
-    if recycleSequential and buySeqActive
-        buySeq := 0
-        buySeqActive := false
+    if recycleSequential and array.size(buySeqCounts) > 0
+        array.remove(buySeqCounts, 0)
+        array.remove(buySeqClose5s, 0)
+        array.remove(buySeqClose8s, 0)
+        array.remove(buySeqExtremes, 0)
+        array.remove(buySeqTdstLevels, 0)
     if recycleCombo and buyComboActive
         buyCombo := 0
         buyComboActive := false
     renderToken(true, "R", true, buySetupColor)
 
 if sellRecycle
-    if recycleSequential and sellSeqActive
-        sellSeq := 0
-        sellSeqActive := false
+    if recycleSequential and array.size(sellSeqCounts) > 0
+        array.remove(sellSeqCounts, 0)
+        array.remove(sellSeqClose5s, 0)
+        array.remove(sellSeqClose8s, 0)
+        array.remove(sellSeqExtremes, 0)
+        array.remove(sellSeqTdstLevels, 0)
     if recycleCombo and sellComboActive
         sellCombo := 0
         sellComboActive := false

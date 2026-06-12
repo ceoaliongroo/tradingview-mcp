@@ -160,3 +160,32 @@ Screenshots:
 - `screenshots/mantilla-overlay-btcusd-d-seqcombo.png`
 - `screenshots/mantilla-overlay-googl-d-seqcombo.png`
 - `screenshots/mantilla-overlay-tsla-d-seqcombo.png`
+
+## 2026-06-12: Sequential FIFO Overlap Investigation
+
+```text
+Scope: Focused only on Sequential countdown mismatches after user visual review. Combo remains out of scope for this pass.
+Evidence: Zoom-in screenshots were captured for QQQ, SPY, BTCUSD, GOOGL, and TSLA daily charts over the 2025-09-01 to 2026-06-12 window.
+NinjaTrader finding: The reference keeps a setup helper list, so more than one Sequential countdown can be active in the same direction. It processes older countdowns first and only draws the first active countdown per direction on a bar; younger countdowns can keep counting internally and become visible after the older countdown completes 13.
+Mantilla root cause: The prior Pine implementation used one buy Sequential state and one sell Sequential state. A new same-direction setup could overwrite or visually conflict with an older countdown before it completed.
+Implementation update: Replaced single Sequential state with FIFO arrays per direction. All active countdowns progress internally; only the oldest active countdown per direction draws on each bar. When the oldest reaches 13, it is removed and the next countdown continues with its existing internal count.
+Recycle update: Sequential recycle remains available, but its default is now false so calibration favors completing Sequential 13 before recycling. If enabled, recycle removes the oldest active countdown only.
+Initial result: QQQ now shows the missing 12 and 13 after the prior 11/R area. SPY now shows older countdown completion before the following countdown continues.
+Status: Needs user visual verification before committing this FIFO correction as stable.
+```
+
+Pre-fix zoom screenshots:
+
+- `screenshots/mantilla-zoom-seq-qqq-d-20260612.png`
+- `screenshots/mantilla-zoom-seq-spy-d-20260612.png`
+- `screenshots/mantilla-zoom-seq-btcusd-d-20260612.png`
+- `screenshots/mantilla-zoom-seq-googl-d-20260612.png`
+- `screenshots/mantilla-zoom-seq-tsla-d-20260612.png`
+
+Post-fix FIFO zoom screenshots:
+
+- `screenshots/mantilla-zoom-seq-qqq-d-20260612-after-fifo.png`
+- `screenshots/mantilla-zoom-seq-spy-d-20260612-after-fifo.png`
+- `screenshots/mantilla-zoom-seq-btcusd-d-20260612-after-fifo.png`
+- `screenshots/mantilla-zoom-seq-googl-d-20260612-after-fifo.png`
+- `screenshots/mantilla-zoom-seq-tsla-d-20260612-after-fifo.png`

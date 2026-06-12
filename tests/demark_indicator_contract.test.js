@@ -83,8 +83,17 @@ describe('Mantilla PB DeMARK 9-13 indicator contract', () => {
     assert.match(pine, /countY\(isBuy, lane, 0\)/);
     assert.match(pine, /label\.get_x\(nextActive\) == bar_index/);
     assert.match(pine, /buySetup.*buySetupColor.*buySetupComplete, 1/s);
-    assert.match(pine, /showSequentialCounts.*buySequentialColor.*buySeq == 13, 2/s);
+    assert.match(pine, /array<int> buySeqCounts/);
+    assert.match(pine, /drewBuySeqThisBar/);
+    assert.match(pine, /showSequentialCounts.*buySequentialColor.*candidate == 13, 2/s);
     assert.match(pine, /showComboCounts.*buyComboColor.*buyCombo == 13, 3/s);
+  });
+
+  it('keeps sequential recycle optional and non-default for calibration', () => {
+    const pine = source();
+    assert.match(pine, /recycleSequential = input\.bool\(false/);
+    assert.match(pine, /array\.remove\(buySeqCounts, 0\)/);
+    assert.match(pine, /array\.remove\(sellSeqCounts, 0\)/);
   });
 
   it('implements named engines for setup, TDST, countdowns, risk, and recycling', () => {
